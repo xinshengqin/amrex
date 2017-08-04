@@ -298,7 +298,7 @@ ifeq ($(USE_CUDA),TRUE)
     ifeq ($(USE_CUDA_ARRAY),TRUE)
         DEFINES += -DCUDA_ARRAY
     endif
-    LIBRARIES += -lnvToolsExt
+    LIBRARIES += -lnvToolsExt -lcuda
     LIBRARY_LOCATIONS += $(CUDA_PATH)/lib64 
     INCLUDE_LOCATIONS += $(CUDA_PATH)/include
     CUDASuffix := .CUDA
