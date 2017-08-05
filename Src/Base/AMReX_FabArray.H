@@ -3061,6 +3061,20 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
         // There can only be local work to do.
         //
 	int N_loc = (*TheFB.m_LocTags).size();
+
+#ifdef CUDA
+	for (int i=0; i<N_loc; ++i)
+        {
+            const CopyComTag& tag = (*TheFB.m_LocTags)[i];
+
+            BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
+            BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
+            // don't transfer data back to CPU to fill ghost cells
+            get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+        }
+        cudaDeviceSynchronize();
+#else // CUDA
+
 #ifdef _OPENMP
 #pragma omp parallel for if (TheFB.m_threadsafe_loc)
 #endif
@@ -3070,15 +3084,9 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
 
             BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
             BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
-
-#ifdef CUDA
-            // don't transfer data back to CPU to fill ghost cells
-            // get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
             get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
-#else
-            get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
-#endif
         }
+#endif // NO-GPU
 
         return;
     }
