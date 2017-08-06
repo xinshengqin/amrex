@@ -39,12 +39,12 @@ amrex::BArena::free (void* pt)
 }
 
 void*
-amrex::BArena::alloc_device (std::size_t _sz)
+amrex::BArena::alloc_device (std::size_t _sz, int device_id)
 {
     void* pt = 0;
 
 #ifdef CUDA
-    gpu_malloc(&pt, &_sz);
+    gpu_malloc(&pt, &_sz, &device_id);
 #endif
 
     return pt;
@@ -52,12 +52,12 @@ amrex::BArena::alloc_device (std::size_t _sz)
 
 #ifdef CUDA_ARRAY
 void*
-amrex::BArena::alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize)
+amrex::BArena::alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize, int device_id)
 {
     void* pt = 0;
 
 #ifdef CUDA
-    gpu_malloc_2d(&pt, &_pitch, &_isize, &_jsize);
+    gpu_malloc_2d(&pt, &_pitch, &_isize, &_jsize, &device_id);
 #endif
 
     return pt;

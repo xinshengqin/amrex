@@ -50,7 +50,7 @@ contains
     call timer_take(timer_name2, timer_id2)
 #endif
 
-    stream = cuda_streams(stream_from_index(idx)+1)
+    stream = cuda_streams(stream_from_index(idx)+1, 0)
 
 #ifdef BL_TINY_PROFILING
     call timer_start(timer_id)
@@ -187,7 +187,7 @@ contains
     call timer_take(timer_name2, timer_id2)
 #endif
 
-    stream = cuda_streams(stream_from_index(idx)+1)
+    stream = cuda_streams(stream_from_index(idx)+1, 0)
 
 #ifdef BL_TINY_PROFILING
     call timer_start(timer_id)

@@ -1048,7 +1048,9 @@ FabArray<FAB>::AllocFabs (const FabFactory<FAB>& factory, const MFInfo& info)
     {
 	int K = indexArray[i];
         const Box& tmpbox = fabbox(K);
+        fab_info.useDevice(deviceArray[i]);
         m_fabs_v.push_back(factory.create(tmpbox, n_comp, fab_info, K));
+        // amrex::Print() << "Fab " << i << " is allocated on device " << deviceArray[i] << std::endl;
     }
     
 #ifdef BL_USE_TEAM
@@ -3070,7 +3072,8 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
             BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
             BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
             // don't transfer data back to CPU to fill ghost cells
-            get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+            // get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+            get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
         }
         cudaDeviceSynchronize();
 #else // CUDA

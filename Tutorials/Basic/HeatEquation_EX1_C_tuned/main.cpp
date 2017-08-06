@@ -13,6 +13,11 @@
 #include "advance_kernel.H"
 #include <AMReX_Device.H>
 
+#ifdef CUDA
+#include <cuda_runtime_api.h>
+#include <AMReX_CUDA_helper.H>
+#endif
+
 
 
 using namespace amrex;
@@ -44,11 +49,6 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 
     const Real* dx = geom.CellSize();
 
-    //
-    // Note that this simple example is not optimized.
-    // The following two MFIter loops could be merged
-    // and we do not have to use flux MultiFab.
-    // 
 
 #ifdef _OPENMP
 #pragma omp parallel
@@ -60,12 +60,13 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 #if (BL_SPACEDIM == 2)
 #ifdef CUDA
         // copy old solution from host to device
-        // old_phi[mfi].toDevice(idx);
+        old_phi[mfi].toDevice(idx);
         const int* lo = bx.loVect();
         const int* hi = bx.hiVect();
 
 #ifdef CUDA_ARRAY
         // use aligned GPU memory
+        checkCudaErrors(cudaSetDevice(old_phi[mfi].deviceID()));
         advance_c_align(lo[0],lo[1],hi[0],hi[1],
                 old_phi[mfi].devicePtr(), 
                 old_phi[mfi].loVect()[0], old_phi[mfi].loVect()[1],
@@ -75,6 +76,7 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
                 new_phi[mfi].hiVect()[0], new_phi[mfi].hiVect()[1],
                 dx[0], dx[1], dt, idx, old_phi[mfi].getPitch());
 #else
+        checkCudaErrors(cudaSetDevice(old_phi[mfi].deviceID()));
         advance_c(lo[0],lo[1],hi[0],hi[1],
         // advance_c_shared(lo[0],lo[1],hi[0],hi[1],
         // advance_c_2x2(lo[0],lo[1],hi[0],hi[1],
@@ -85,11 +87,12 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
                 new_phi[mfi].devicePtr(), 
                 new_phi[mfi].loVect()[0], new_phi[mfi].loVect()[1],
                 new_phi[mfi].hiVect()[0], new_phi[mfi].hiVect()[1],
-                dx[0], dx[1], dt, idx);
+                dx[0], dx[1], dt, idx, 
+                old_phi[mfi].deviceID());
 #endif // CUDA_ARRAY
 
         // copy updated solution from device to host
-        // new_phi[mfi].toHost(idx);
+        new_phi[mfi].toHost(idx);
 #else
         const int* lo = bx.loVect();
         const int* hi = bx.hiVect();
@@ -197,6 +200,9 @@ void main_main ()
     // Initialize phi_new by calling a Fortran routine.
     // MFIter = MultiFab Iterator
     // for ( MFIter mfi(*phi_new); mfi.isValid(); ++mfi )
+#ifdef _OPENMP
+#pragma omp parallel
+#endif
     for ( MFIter mfi(*phi_old); mfi.isValid(); ++mfi )
     {
         const Box& bx = mfi.validbox();
@@ -236,6 +242,9 @@ void main_main ()
 // TODO: move this to somewhere else or wrap it in a member function
 // of Basefab, e.g. when allocate device memory
 #ifdef CUDA
+#ifdef _OPENMP
+#pragma omp parallel
+#endif
     for ( MFIter mfi(*phi_old); mfi.isValid(); ++mfi )
     {
         const Box& bx = mfi.validbox();
@@ -244,7 +253,7 @@ void main_main ()
         flux[0][mfi].initialize_device();
         flux[1][mfi].initialize_device();
         // copy to device the 1st time
-        (*phi_old)[mfi].toDevice();
+        // (*phi_old)[mfi].toDevice();
     }
     gpu_synchronize();
 #endif
@@ -262,16 +271,19 @@ void main_main ()
         // Write a plotfile of the current data (plot_int was defined in the inputs file)
         if (plot_int > 0 && n%plot_int == 0)
         {
-#ifdef CUDA
-            for ( MFIter mfi(*phi_new); mfi.isValid(); ++mfi )
-            {
-                const Box& bx = mfi.validbox();
-                // copy to host the 1st time
-                (*phi_new)[mfi].toHost();
-            }
-            gpu_synchronize();
-
-#endif
+// #ifdef CUDA
+// #ifdef _OPENMP
+// #pragma omp parallel
+// #endif
+//             for ( MFIter mfi(*phi_new); mfi.isValid(); ++mfi )
+//             {
+//                 const Box& bx = mfi.validbox();
+//                 // copy to host the 1st time
+//                 (*phi_new)[mfi].toHost();
+//             }
+//             gpu_synchronize();
+// 
+// #endif
             const std::string& pltfile = amrex::Concatenate("plt",n,5);
             WriteSingleLevelPlotfile(pltfile, *phi_new, {"phi"}, geom, time, n);
         }

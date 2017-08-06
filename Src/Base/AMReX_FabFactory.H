@@ -12,6 +12,9 @@ struct FabInfo
     bool alloc = true;
     bool device = false;
     bool shared = false;
+#ifdef CUDA
+    int device_id = 0;
+#endif
 
     FabInfo& SetAlloc (bool a) {
         alloc = a;
@@ -27,6 +30,13 @@ struct FabInfo
         shared = s;
         return *this;
     }
+
+#ifdef CUDA
+    FabInfo& useDevice (int id) {
+	device_id = id;
+	return *this;
+    }
+#endif
 };
 
 template <class FAB>
@@ -45,7 +55,7 @@ public:
     virtual FAB* create (const Box& box, int ncomps, const FabInfo& info, int box_index) const override
     {
         FAB* fab = new FAB(box, ncomps, info.alloc, info.shared);
-	if (info.device) fab->allocate_device();
+	if (info.device) fab->allocate_device(info.device_id);
 	return fab;
     }
 };

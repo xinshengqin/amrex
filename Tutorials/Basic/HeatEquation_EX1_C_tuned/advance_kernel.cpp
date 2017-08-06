@@ -6,6 +6,7 @@
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 #include <AMReX_Device.H>
+#include <AMReX_CUDA_helper.H>
 #define BLOCKSIZE_2D 16
 #define KERNEL_MAX_THREADS 256
 #define KERNEL_MIN_BLOCKS 8
@@ -283,7 +284,7 @@ void compute_flux_c(const int& lox, const int& loy, const int& hix, const int& h
                     1 
                  );
     cudaStream_t pStream;
-    get_stream(&idx, &pStream);
+    get_stream(&idx, &pStream, 0);
     compute_flux_doit_gpu<<<gridSize, blockSize, 0, pStream>>>(
             lox, loy, hix, hiy,
             phi,
@@ -319,7 +320,7 @@ void update_phi_c(const int& lox, const int& loy, const int& hix, const int& hiy
                     1 
                  );
     cudaStream_t pStream;
-    get_stream(&idx, &pStream);
+    get_stream(&idx, &pStream, 0);
     update_phi_doit_gpu<<<gridSize, blockSize, 0, pStream>>>(
             lox, loy, hix, hiy,
             phi_old,
@@ -341,7 +342,7 @@ void advance_c(const int& lox, const int& loy, const int& hix, const int& hiy,
                 const int& phi_old_lox, const int& phi_old_loy, const int& phi_old_hix, const int& phi_old_hiy,
                 amrex::Real* phi_new,
                 const int& phi_new_lox, const int& phi_new_loy, const int& phi_new_hix, const int& phi_new_hiy,
-                const amrex::Real& dx, const amrex::Real& dy, const amrex::Real& dt, const int& idx)
+                const amrex::Real& dx, const amrex::Real& dy, const amrex::Real& dt, const int& idx, const int& device_id)
 {
 
 #if (BL_SPACEDIM == 2)
@@ -351,7 +352,7 @@ void advance_c(const int& lox, const int& loy, const int& hix, const int& hiy,
                     1 
                  );
     cudaStream_t pStream;
-    get_stream(&idx, &pStream);
+    get_stream(&idx, &pStream, &device_id);
     advance_doit_gpu<<<gridSize, blockSize, 0, pStream>>>(
             lox, loy, hix, hiy,
             phi_old,
@@ -359,6 +360,7 @@ void advance_c(const int& lox, const int& loy, const int& hix, const int& hiy,
             phi_new,
             phi_new_lox, phi_new_loy, phi_new_hix, phi_new_hiy,
             dx, dy, dt);
+    getLastCudaError("advance_doit_gpu() kernel execution failed.\n");
 #elif (BL_SPACEDIM == 3)
     // TODO
 #endif
@@ -378,7 +380,7 @@ void advance_c_2x2(const int& lox, const int& loy, const int& hix, const int& hi
                     1 
                  );
     cudaStream_t pStream;
-    get_stream(&idx, &pStream);
+    get_stream(&idx, &pStream, 0);
     advance_doit_gpu_2x2<<<gridSize, blockSize, 0, pStream>>>(
             lox, loy, hix, hiy,
             phi_old,
@@ -405,7 +407,7 @@ void advance_c_shared(const int& lox, const int& loy, const int& hix, const int&
                     1 
                  );
     cudaStream_t pStream;
-    get_stream(&idx, &pStream);
+    get_stream(&idx, &pStream, 0);
     advance_doit_gpu_shared<<<gridSize, blockSize, (BLOCKSIZE_2D+2)*(BLOCKSIZE_2D*2)*sizeof(amrex::Real), pStream>>>(
             lox, loy, hix, hiy,
             phi_old,
@@ -434,7 +436,7 @@ void advance_c_align(const int& lox, const int& loy, const int& hix, const int& 
                     1 
                  );
     cudaStream_t pStream;
-    get_stream(&idx, &pStream);
+    get_stream(&idx, &pStream, 0);
     advance_doit_gpu_align<<<gridSize, blockSize, 0, pStream>>>(
             lox, loy, hix, hiy,
             phi_old,

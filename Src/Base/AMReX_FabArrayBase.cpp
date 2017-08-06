@@ -177,6 +177,38 @@ FabArrayBase::define (const BoxArray&            bxs,
             ownership.push_back(myProc == distributionMap[i]);
 	}
     }
+#ifdef CUDA
+    // compute distribution of fabs to different GPUs
+    deviceArray.assign(indexArray.size(),-1);
+    int num_gpus = 0;
+    cudaGetDeviceCount(&num_gpus);
+    if (num_gpus == 0)
+    {
+        amrex::Error("no devices supporting CUDA.\n");
+    }
+    if (num_gpus == 1) {
+        // use device 0
+        std::fill(deviceArray.begin(), deviceArray.end(), 0);
+    }
+    else { // num_gpus > 1
+        int ntot = indexArray.size();
+        int nr = ntot / num_gpus;
+        int nlft = ntot - nr * num_gpus;
+        int beginIndex, endIndex;
+        for (int device_id = 0; device_id < num_gpus; ++device_id) {
+            if (device_id < nlft) { // get nr+1 items
+                beginIndex = device_id * (nr + 1);
+                endIndex = beginIndex + nr + 1;
+            } else {           // get nr items
+                beginIndex = device_id * nr + nlft;
+                endIndex = beginIndex + nr;
+            }	    
+            Array<int>::iterator begin = deviceArray.begin() + beginIndex;
+            Array<int>::iterator end = deviceArray.begin() + endIndex; 
+            std::fill(begin, end, device_id);
+        }
+    }
+#endif
 }
 
 Box

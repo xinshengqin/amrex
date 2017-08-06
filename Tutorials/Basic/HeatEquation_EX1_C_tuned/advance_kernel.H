@@ -94,7 +94,7 @@ void advance_c(const int& lox, const int& loy, const int& hix, const int& hiy,
                 const int& phi_old_lox, const int& phi_old_loy, const int& phi_old_hix, const int& phi_old_hiy,
                 amrex::Real* phi_new,
                 const int& phi_new_lox, const int& phi_new_loy, const int& phi_new_hix, const int& phi_new_hiy,
-                const amrex::Real& dx, const amrex::Real& dy, const amrex::Real& dt, const int& idx);
+                const amrex::Real& dx, const amrex::Real& dy, const amrex::Real& dt, const int& idx, const int& device_id = 0);
 
 void advance_c_2x2(const int& lox, const int& loy, const int& hix, const int& hiy,
                 const amrex::Real* phi_old,

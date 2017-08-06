@@ -416,6 +416,12 @@ protected:
     int                 aFAPId;      // ---- id of currently allocated fab array pointers
     int                 aFAPIdLock;  // ---- lock for resizing sidecars
 
+#ifdef CUDA
+    // data for device
+    // map indexArray index to device ID
+    Array<int> deviceArray;
+#endif
+
     mutable BDKey m_bdkey;
 
     //

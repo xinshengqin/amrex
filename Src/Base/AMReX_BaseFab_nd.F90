@@ -439,9 +439,9 @@ contains
     call threads_and_blocks(lo, hi, numBlocks, numThreads)
     ! s = stream_from_index(idx)
 
-    ! TODO: for now, always use stream 1
+    ! TODO: for now, always use stream 1 and device 0
     call fort_fab_copy_doit &
-    <<<numBlocks, numThreads, 0, cuda_streams(0)>>> &
+    <<<numBlocks, numThreads, 0, cuda_streams(0,0)>>> &
     (lo(1), lo(2), lo(3), hi(1), hi(2), hi(3), &
      dst, dlo(1), dlo(2), dlo(3), dhi(1), dhi(2), dhi(3), &
      src, slo(1), slo(2), slo(3), shi(1), shi(2), shi(3), &

@@ -41,12 +41,12 @@ public:
     */
     virtual void free (void* ap) override;
 
-    virtual void* alloc_device (size_t nbytes) override;
+    virtual void* alloc_device (size_t nbytes, int device_id = 0) override;
 #ifdef CUDA_ARRAY
     /*
      * do nothing for now
      */ 
-    virtual void* alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize) override { void* pt = 0; return pt;};
+    virtual void* alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize, int device_id = 0) override { void* pt = 0; return pt;};
 #endif
     virtual void free_device (void* ap) override;
 

@@ -6,9 +6,12 @@ module cuda_module
     implicit none
 
     integer, parameter :: max_cuda_streams = 20
-    integer(kind=cuda_stream_kind) :: cuda_streams(max_cuda_streams)
+    ! assume each CPU node has at most 16 GPUs
+    integer, parameter :: max_num_devices = 16
+    ! TODO: may need to add SAVE attribute to these
+    integer(kind=cuda_stream_kind) :: cuda_streams(max_cuda_streams, max_num_devices)
 
-    integer, save :: cuda_device_id
+    integer, save :: cuda_device_id, num_devices
 
     ! For timing
     ! use 0-index array
@@ -25,14 +28,18 @@ contains
 
   subroutine initialize_cuda() bind(c, name='initialize_cuda')
 
-    use cudafor, only: cudaStreamCreate
+    use cudafor, only: cudaStreamCreate, cudaGetDeviceCount, cudaSetDevice
     
     implicit none
 
-    integer :: i, cudaResult
+    integer :: i, p, cudaResult
 
-    do i = 1, max_cuda_streams
-       cudaResult = cudaStreamCreate(cuda_streams(i))
+    cudaResult = cudaGetDeviceCount(num_devices)
+    do p = 0, num_devices-1
+        cudaResult = cudaSetDevice(p)
+        do i = 1, max_cuda_streams
+           cudaResult = cudaStreamCreate(cuda_streams(i,p))
+        enddo
     enddo
 
     cuda_device_id = 0
@@ -123,36 +130,40 @@ contains
 
 
 
-  subroutine gpu_malloc(x, sz) bind(c, name='gpu_malloc')
+  subroutine gpu_malloc(x, sz, dev_id) bind(c, name='gpu_malloc')
 
-    use cudafor, only: cudaMalloc, c_devptr
+    use cudafor, only: cudaMalloc, cudaSetDevice, c_devptr
     use iso_c_binding, only: c_size_t
 
     implicit none
 
     type(c_devptr) :: x
     integer(c_size_t) :: sz
+    integer :: dev_id
 
     integer :: cudaResult
 
+    cudaResult = cudaSetDevice(dev_id)
     cudaResult = cudaMalloc(x, sz)
 
   end subroutine gpu_malloc
 
 
 #ifdef CUDA_ARRAY
-  subroutine gpu_malloc_2d(x, pitch, isize, jsize) bind(c, name='gpu_malloc_2d')
+  subroutine gpu_malloc_2d(x, pitch, isize, jsize, dev_id) bind(c, name='gpu_malloc_2d')
 
-    use cudafor, only: cudaMallocPitch, c_devptr
+    use cudafor, only: cudaMallocPitch, ,cudaSetDevice, c_devptr
     use iso_c_binding, only: c_size_t
 
     implicit none
 
     type(c_devptr) :: x
     integer(c_size_t) :: pitch, isize, jsize
+    integer :: dev_id
 
     integer :: cudaResult
 
+    cudaResult = cudaSetDevice(dev_id)
     cudaResult = cudaMallocPitch(x, pitch, isize, jsize)
 
   end subroutine gpu_malloc_2d
@@ -206,9 +217,9 @@ contains
 
 
 
-  subroutine gpu_htod_memcpy_async(p_d, p_h, sz, idx) bind(c, name='gpu_htod_memcpy_async')
+  subroutine gpu_htod_memcpy_async(p_d, p_h, sz, idx, dev_id) bind(c, name='gpu_htod_memcpy_async')
 
-    use cudafor, only: cudaMemcpyAsync, cudaMemcpyHostToDevice, c_devptr, cuda_stream_kind
+    use cudafor, only: cudaMemcpyAsync, cudaSetDevice, cudaMemcpyHostToDevice, c_devptr, cuda_stream_kind
     use iso_c_binding, only: c_ptr, c_size_t
 
     implicit none
@@ -216,22 +227,23 @@ contains
     type(c_devptr), value :: p_d
     type(c_ptr), value :: p_h
     integer(c_size_t) :: sz
-    integer :: idx
+    integer :: idx, dev_id
 
     integer :: s
     integer :: cudaResult
 
     s = stream_from_index(idx)
 
-    cudaResult = cudaMemcpyAsync(p_d, p_h, sz, cudaMemcpyHostToDevice, cuda_streams(s))
+    cudaResult = cudaSetDevice(dev_id)
+    cudaResult = cudaMemcpyAsync(p_d, p_h, sz, cudaMemcpyHostToDevice, cuda_streams(s,dev_id))
 
   end subroutine gpu_htod_memcpy_async
 
 
 
-  subroutine gpu_dtoh_memcpy_async(p_h, p_d, sz, idx) bind(c, name='gpu_dtoh_memcpy_async')
+  subroutine gpu_dtoh_memcpy_async(p_h, p_d, sz, idx, dev_id) bind(c, name='gpu_dtoh_memcpy_async')
 
-    use cudafor, only: cudaMemcpyAsync, cudaMemcpyDeviceToHost, c_devptr
+    use cudafor, only: cudaMemcpyAsync, cudaSetDevice, cudaMemcpyDeviceToHost, c_devptr
     use iso_c_binding, only: c_ptr, c_size_t
 
     implicit none
@@ -239,21 +251,22 @@ contains
     type(c_ptr), value :: p_h
     type(c_devptr), value :: p_d
     integer(c_size_t) :: sz
-    integer :: idx
+    integer :: idx, dev_id
 
     integer :: s
     integer :: cudaResult
 
     s = stream_from_index(idx)
 
-    cudaResult = cudaMemcpyAsync(p_h, p_d, sz, cudaMemcpyDeviceToHost, cuda_streams(s))
+    cudaResult = cudaSetDevice(dev_id)
+    cudaResult = cudaMemcpyAsync(p_h, p_d, sz, cudaMemcpyDeviceToHost, cuda_streams(s,dev_id))
 
   end subroutine gpu_dtoh_memcpy_async
  
 #ifdef CUDA_ARRAY
-  subroutine gpu_htod_memcpy_2d_async(p_d, pitch_d, p_h, pitch_h, isize, jsize, idx) bind(c, name='gpu_htod_memcpy_2d_async')
+  subroutine gpu_htod_memcpy_2d_async(p_d, pitch_d, p_h, pitch_h, isize, jsize, idx, dev_id) bind(c, name='gpu_htod_memcpy_2d_async')
 
-    use cudafor, only: cudaMemcpy2DAsync, cudaMemcpyHostToDevice, c_devptr, cuda_stream_kind
+    use cudafor, only: cudaMemcpy2DAsync, cudaSetDevice, cudaMemcpyHostToDevice, c_devptr, cuda_stream_kind
     use iso_c_binding, only: c_ptr, c_size_t
 
     implicit none
@@ -261,22 +274,22 @@ contains
     type(c_devptr), value :: p_d
     type(c_ptr), value :: p_h
     integer(c_size_t) :: pitch_d, pitch_h, isize, jsize
-    integer :: idx
+    integer :: idx, dev_id
 
     integer :: s
     integer :: cudaResult
 
     s = stream_from_index(idx)
-
-    cudaResult = cudaMemcpy2DAsync(p_d, pitch_d, p_h, pitch_h, isize, jsize, cudaMemcpyHostToDevice, cuda_streams(s))
+    cudaResult = cudaSetDevice(dev_id)
+    cudaResult = cudaMemcpy2DAsync(p_d, pitch_d, p_h, pitch_h, isize, jsize, cudaMemcpyHostToDevice, cuda_streams(s,dev_id))
 
   end subroutine gpu_htod_memcpy_2d_async
 #endif
 
 #ifdef CUDA_ARRAY
-  subroutine gpu_dtoh_memcpy_2d_async(p_h, pitch_h, p_d, pitch_d, isize, jsize, idx) bind(c, name='gpu_dtoh_memcpy_2d_async')
+  subroutine gpu_dtoh_memcpy_2d_async(p_h, pitch_h, p_d, pitch_d, isize, jsize, idx, dev_id) bind(c, name='gpu_dtoh_memcpy_2d_async')
 
-    use cudafor, only: cudaMemcpy2DAsync, cudaMemcpyDeviceToHost, c_devptr, cuda_stream_kind
+    use cudafor, only: cudaMemcpy2DAsync, cudaSetDevice, cudaMemcpyDeviceToHost, c_devptr, cuda_stream_kind
     use iso_c_binding, only: c_ptr, c_size_t
 
     implicit none
@@ -284,63 +297,64 @@ contains
     type(c_devptr), value :: p_d
     type(c_ptr), value :: p_h
     integer(c_size_t) :: pitch_d, pitch_h, isize, jsize
-    integer :: idx
+    integer :: idx, dev_id
 
     integer :: s
     integer :: cudaResult
 
     s = stream_from_index(idx)
-
-    cudaResult = cudaMemcpy2DAsync(p_h, pitch_h, p_d, pitch_d, isize, jsize, cudaMemcpyDeviceToHost, cuda_streams(s))
+    cudaResult = cudaSetDevice(dev_id)
+    cudaResult = cudaMemcpy2DAsync(p_h, pitch_h, p_d, pitch_d, isize, jsize, cudaMemcpyDeviceToHost, cuda_streams(s,dev_id))
 
   end subroutine gpu_dtoh_memcpy_2d_async
 #endif
 
 
-  subroutine gpu_htod_memprefetch_async(p, sz, idx) bind(c, name='gpu_htod_memprefetch_async')
+  subroutine gpu_htod_memprefetch_async(p, sz, idx, dev_id) bind(c, name='gpu_htod_memprefetch_async')
 
-    use cudafor, only: cudaMemPrefetchAsync, c_devptr
+    use cudafor, only: cudaMemPrefetchAsync, cudaSetDevice, c_devptr
     use iso_c_binding, only: c_size_t
 
     implicit none
 
     type(c_devptr) :: p
     integer(c_size_t) :: sz
-    integer :: idx
+    integer :: idx, dev_id
 
     integer :: s
     integer :: cudaResult
 
     s = stream_from_index(idx)
-
-    cudaResult = cudaMemPrefetchAsync(p, sz, cuda_device_id, cuda_streams(s))
+    cudaResult = cudaSetDevice(dev_id)
+    cudaResult = cudaMemPrefetchAsync(p, sz, cuda_device_id, cuda_streams(s,dev_id))
 
   end subroutine gpu_htod_memprefetch_async
 
 
 
-  subroutine gpu_dtoh_memprefetch_async(p, sz, idx) bind(c, name='gpu_dtoh_memprefetch_async')
+  subroutine gpu_dtoh_memprefetch_async(p, sz, idx, dev_id) bind(c, name='gpu_dtoh_memprefetch_async')
 
-    use cudafor, only: cudaMemPrefetchAsync, c_devptr, cudaCpuDeviceId
+    use cudafor, only: cudaMemPrefetchAsync, cudaSetDevice, c_devptr, cudaCpuDeviceId
     use iso_c_binding, only: c_size_t
 
     implicit none
 
     type(c_devptr) :: p
     integer(c_size_t) :: sz
-    integer :: idx
+    integer :: idx, dev_id
 
     integer :: s
     integer :: cudaResult
 
     s = stream_from_index(idx)
-
-    cudaResult = cudaMemPrefetchAsync(p, sz, cudaCpuDeviceId, cuda_streams(s))
+    cudaResult = cudaSetDevice(dev_id)
+    cudaResult = cudaMemPrefetchAsync(p, sz, cudaCpuDeviceId, cuda_streams(s,dev_id))
 
   end subroutine gpu_dtoh_memprefetch_async
 
 
 
+  ! TODO: this subroutine is deprecated
   subroutine gpu_synchronize() bind(c, name='gpu_synchronize')
 
     use cudafor, only: cudaDeviceSynchronize
@@ -353,18 +367,18 @@ contains
 
   end subroutine gpu_synchronize
 
-  subroutine gpu_synchronize_stream(idx) bind(c, name='gpu_synchronize_stream')
+  subroutine gpu_synchronize_stream(idx, dev_id) bind(c, name='gpu_synchronize_stream')
 
-    use cudafor, only: cudaStreamSynchronize
+    use cudafor, only: cudaSetDevice, cudaStreamSynchronize
 
     implicit none
 
     integer :: cudaResult
-    integer :: s, idx
+    integer :: s, idx, dev_id
 
     s = stream_from_index(idx)
-
-    cudaResult = cudaStreamSynchronize(cuda_streams(s))
+    cudaResult = cudaSetDevice(dev_id)
+    cudaResult = cudaStreamSynchronize(cuda_streams(s, dev_id))
 
   end subroutine gpu_synchronize_stream
 
@@ -461,14 +475,18 @@ contains
         n= n_calls(id)
     end subroutine get_cuda_num_calls
 
-    subroutine get_stream(id, pStream) bind(c, name='get_stream')
+    subroutine get_stream(id, pStream, dev_id) bind(c, name='get_stream')
         implicit none
         integer, intent(in) :: id
         integer(kind=cuda_stream_kind),intent(out) :: pStream
-        integer :: s
+        integer :: s, dev_id
 
         s = stream_from_index(id)
-        pStream = cuda_streams(s)
+        pStream = cuda_streams(s, dev_id)
     end subroutine get_stream
+
+    subroutine finalize_cuda() bind(c, name='finalize_cuda')
+        ! put Fortran side finalization here
+    end subroutine finalize_cuda
 
 end module cuda_module

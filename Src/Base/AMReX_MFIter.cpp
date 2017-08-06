@@ -4,6 +4,12 @@
 #include <AMReX_FArrayBox.H>
 #include <AMReX_Device.H>
 
+#ifdef CUDA
+#include <cuda_runtime_api.h>
+#include <AMReX_CUDA_helper.H>
+#include <nvToolsExt.h>
+#endif
+
 namespace amrex {
 
 MFIter::MFIter (const FabArrayBase& fabarray_, 
@@ -185,10 +191,28 @@ MFIter::Initialize ()
 		beginIndex += tid * nr + nlft;
 		endIndex = beginIndex + nr;
 	    }	    
+            // // set device
+            // int device_count;  
+            // checkCudaErrors(cudaGetDeviceCount(&device_count));
+            // if (device_count == 0)
+            // {
+            //     amrex::Error("no devices supporting CUDA.\n");
+            // }
+            // int device_id = tid%device_count;
+            // std::string name = "OpenMP thread " + std::to_string(tid);
+            // checkCudaErrors(cudaSetDevice(device_id));
+            // // checkCudaErrors(cudaGetDevice(&gpu_id));
+            // // printf("CPU thread %d (of %d) uses CUDA device %d\n", cpu_thread_id, num_cpu_threads, gpu_id);
+            // // name the thread for NVVP
+            // nvtxNameOsThread(pthread_self(), name.c_str());
 	}
 #endif
 
 	currentIndex = beginIndex;
+#ifdef CUDA
+        int use_device = fabArray.deviceArray[currentIndex];
+        checkCudaErrors(cudaSetDevice(use_device));
+#endif
 
 	typ = fabArray.boxArray().ixType();
     }
@@ -304,6 +328,12 @@ void
 MFIter::operator++ () {
 
     ++currentIndex;
+#ifdef CUDA
+    if (isValid()) {
+        int use_device = fabArray.deviceArray[currentIndex];
+        checkCudaErrors(cudaSetDevice(use_device));
+    }
+#endif
 
     // releaseDeviceData();
 

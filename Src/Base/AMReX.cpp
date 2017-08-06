@@ -541,6 +541,8 @@ amrex::Finalize (bool finalize_parallel)
 
 // clean up CUDA staff
 #ifdef CUDA
+    // Fortran side clean up
+    finalize_cuda();
     // cudaDeviceReset causes the driver to clean up all state. While
     // not mandatory in normal operation, it is good practice.  It is also
     // needed to ensure correct operation when the application is being

@@ -176,7 +176,7 @@ CArena::free (void* vp)
 // Device allocators are not currently implemented in CArena.
 
 void*
-CArena::alloc_device (size_t nbytes)
+CArena::alloc_device (size_t nbytes, int device_id)
 {
     void* pt = 0;
     return pt;
