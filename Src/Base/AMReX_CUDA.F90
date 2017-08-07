@@ -219,7 +219,7 @@ contains
 
   subroutine gpu_htod_memcpy_async(p_d, p_h, sz, idx, dev_id) bind(c, name='gpu_htod_memcpy_async')
 
-    use cudafor, only: cudaMemcpyAsync, cudaSetDevice, cudaMemcpyHostToDevice, c_devptr, cuda_stream_kind
+    use cudafor, only: cudaMemcpyAsync, cudaMemcpyHostToDevice, c_devptr, cuda_stream_kind
     use iso_c_binding, only: c_ptr, c_size_t
 
     implicit none
@@ -234,7 +234,6 @@ contains
 
     s = stream_from_index(idx)
 
-    cudaResult = cudaSetDevice(dev_id)
     cudaResult = cudaMemcpyAsync(p_d, p_h, sz, cudaMemcpyHostToDevice, cuda_streams(s,dev_id))
 
   end subroutine gpu_htod_memcpy_async
@@ -243,7 +242,7 @@ contains
 
   subroutine gpu_dtoh_memcpy_async(p_h, p_d, sz, idx, dev_id) bind(c, name='gpu_dtoh_memcpy_async')
 
-    use cudafor, only: cudaMemcpyAsync, cudaSetDevice, cudaMemcpyDeviceToHost, c_devptr
+    use cudafor, only: cudaMemcpyAsync, cudaMemcpyDeviceToHost, c_devptr
     use iso_c_binding, only: c_ptr, c_size_t
 
     implicit none
@@ -258,7 +257,6 @@ contains
 
     s = stream_from_index(idx)
 
-    cudaResult = cudaSetDevice(dev_id)
     cudaResult = cudaMemcpyAsync(p_h, p_d, sz, cudaMemcpyDeviceToHost, cuda_streams(s,dev_id))
 
   end subroutine gpu_dtoh_memcpy_async
@@ -266,7 +264,7 @@ contains
 #ifdef CUDA_ARRAY
   subroutine gpu_htod_memcpy_2d_async(p_d, pitch_d, p_h, pitch_h, isize, jsize, idx, dev_id) bind(c, name='gpu_htod_memcpy_2d_async')
 
-    use cudafor, only: cudaMemcpy2DAsync, cudaSetDevice, cudaMemcpyHostToDevice, c_devptr, cuda_stream_kind
+    use cudafor, only: cudaMemcpy2DAsync, cudaMemcpyHostToDevice, c_devptr, cuda_stream_kind
     use iso_c_binding, only: c_ptr, c_size_t
 
     implicit none
@@ -280,7 +278,6 @@ contains
     integer :: cudaResult
 
     s = stream_from_index(idx)
-    cudaResult = cudaSetDevice(dev_id)
     cudaResult = cudaMemcpy2DAsync(p_d, pitch_d, p_h, pitch_h, isize, jsize, cudaMemcpyHostToDevice, cuda_streams(s,dev_id))
 
   end subroutine gpu_htod_memcpy_2d_async
@@ -289,7 +286,7 @@ contains
 #ifdef CUDA_ARRAY
   subroutine gpu_dtoh_memcpy_2d_async(p_h, pitch_h, p_d, pitch_d, isize, jsize, idx, dev_id) bind(c, name='gpu_dtoh_memcpy_2d_async')
 
-    use cudafor, only: cudaMemcpy2DAsync, cudaSetDevice, cudaMemcpyDeviceToHost, c_devptr, cuda_stream_kind
+    use cudafor, only: cudaMemcpy2DAsync, cudaMemcpyDeviceToHost, c_devptr, cuda_stream_kind
     use iso_c_binding, only: c_ptr, c_size_t
 
     implicit none
@@ -303,7 +300,6 @@ contains
     integer :: cudaResult
 
     s = stream_from_index(idx)
-    cudaResult = cudaSetDevice(dev_id)
     cudaResult = cudaMemcpy2DAsync(p_h, pitch_h, p_d, pitch_d, isize, jsize, cudaMemcpyDeviceToHost, cuda_streams(s,dev_id))
 
   end subroutine gpu_dtoh_memcpy_2d_async
@@ -312,7 +308,7 @@ contains
 
   subroutine gpu_htod_memprefetch_async(p, sz, idx, dev_id) bind(c, name='gpu_htod_memprefetch_async')
 
-    use cudafor, only: cudaMemPrefetchAsync, cudaSetDevice, c_devptr
+    use cudafor, only: cudaMemPrefetchAsync, c_devptr
     use iso_c_binding, only: c_size_t
 
     implicit none
@@ -325,7 +321,6 @@ contains
     integer :: cudaResult
 
     s = stream_from_index(idx)
-    cudaResult = cudaSetDevice(dev_id)
     cudaResult = cudaMemPrefetchAsync(p, sz, cuda_device_id, cuda_streams(s,dev_id))
 
   end subroutine gpu_htod_memprefetch_async
@@ -334,7 +329,7 @@ contains
 
   subroutine gpu_dtoh_memprefetch_async(p, sz, idx, dev_id) bind(c, name='gpu_dtoh_memprefetch_async')
 
-    use cudafor, only: cudaMemPrefetchAsync, cudaSetDevice, c_devptr, cudaCpuDeviceId
+    use cudafor, only: cudaMemPrefetchAsync, c_devptr, cudaCpuDeviceId
     use iso_c_binding, only: c_size_t
 
     implicit none
@@ -347,14 +342,12 @@ contains
     integer :: cudaResult
 
     s = stream_from_index(idx)
-    cudaResult = cudaSetDevice(dev_id)
     cudaResult = cudaMemPrefetchAsync(p, sz, cudaCpuDeviceId, cuda_streams(s,dev_id))
 
   end subroutine gpu_dtoh_memprefetch_async
 
 
 
-  ! TODO: this subroutine is deprecated
   subroutine gpu_synchronize() bind(c, name='gpu_synchronize')
 
     use cudafor, only: cudaDeviceSynchronize

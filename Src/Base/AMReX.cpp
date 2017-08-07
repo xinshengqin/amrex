@@ -341,6 +341,10 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse, MPI_Comm mpi_
         amrex::Error("no devices supporting CUDA.\n");
     }
     amrex::Print() << "Found " << device_count << " NVIDIA GPUs." << std::endl;
+    ParmParse pp;
+    ParallelDescriptor::nDevices_used = device_count; // use all available devices by default
+    pp.query("nDevices", ParallelDescriptor::nDevices_used); // can also read from input files
+    amrex::Print() << "Using " <<  ParallelDescriptor::get_num_devices_used() << " of " << device_count << " NVIDIA GPUs." << std::endl;
 #ifdef BL_USE_MPI
     int device_rank = ParallelDescriptor::MyProc()%device_count;
     std::string name = "MPI RANK " + std::to_string(ParallelDescriptor::MyProc());

@@ -12,8 +12,13 @@
 
 namespace amrex {
 
+
 MFIter::MFIter (const FabArrayBase& fabarray_, 
-		unsigned char       flags_)
+		unsigned char       flags_
+#ifdef CUDA
+                ,bool                use_device_
+#endif
+                )
     :
     fabArray(fabarray_),
     tile_size((flags_ & Tiling) ? FabArrayBase::mfiter_tile_size : IntVect::TheZeroVector()),
@@ -22,6 +27,9 @@ MFIter::MFIter (const FabArrayBase& fabarray_,
     local_index_map(nullptr),
     tile_array(nullptr),
     local_tile_index_map(nullptr),
+#ifdef CUDA
+    use_device(use_device_),
+#endif
     num_local_tiles(nullptr)
 {
     Initialize();
@@ -37,6 +45,9 @@ MFIter::MFIter (const FabArrayBase& fabarray_,
     local_index_map(nullptr),
     tile_array(nullptr),
     local_tile_index_map(nullptr),
+#ifdef CUDA
+    use_device(false),
+#endif
     num_local_tiles(nullptr)
 {
     Initialize();
@@ -53,6 +64,9 @@ MFIter::MFIter (const FabArrayBase& fabarray_,
     local_index_map(nullptr),
     tile_array(nullptr),
     local_tile_index_map(nullptr),
+#ifdef CUDA
+    use_device(false),
+#endif
     num_local_tiles(nullptr)
 {
     Initialize();
@@ -68,6 +82,9 @@ MFIter::MFIter (const BoxArray& ba, const DistributionMapping& dm, unsigned char
     local_index_map(nullptr),
     tile_array(nullptr),
     local_tile_index_map(nullptr),
+#ifdef CUDA
+    use_device(false),
+#endif
     num_local_tiles(nullptr)
 {
     Initialize();
@@ -83,6 +100,9 @@ MFIter::MFIter (const BoxArray& ba, const DistributionMapping& dm, bool do_tilin
     local_index_map(nullptr),
     tile_array(nullptr),
     local_tile_index_map(nullptr),
+#ifdef CUDA
+    use_device(false),
+#endif
     num_local_tiles(nullptr)
 {
     Initialize();
@@ -100,6 +120,9 @@ MFIter::MFIter (const BoxArray& ba, const DistributionMapping& dm,
     local_index_map(nullptr),
     tile_array(nullptr),
     local_tile_index_map(nullptr),
+#ifdef CUDA
+    use_device(false),
+#endif
     num_local_tiles(nullptr)
 {
     Initialize();
@@ -111,6 +134,16 @@ MFIter::~MFIter ()
 #if BL_USE_TEAM
     if ( ! (flags & NoTeamBarrier) )
 	ParallelDescriptor::MyTeam().MemoryBarrier();
+#endif
+#ifdef CUDA
+    if (use_device) {
+        // synchronize all devices
+        int n_dev = ParallelDescriptor::get_num_devices_used();
+        for (int i = 0; i < n_dev; ++i) {
+            checkCudaErrors(cudaSetDevice(i));
+            checkCudaErrors(cudaDeviceSynchronize());
+        }
+    }
 #endif
     // releaseDeviceData();
 }
@@ -330,8 +363,10 @@ MFIter::operator++ () {
     ++currentIndex;
 #ifdef CUDA
     if (isValid()) {
+        int pre_use_device = fabArray.deviceArray[currentIndex-1];
         int use_device = fabArray.deviceArray[currentIndex];
-        checkCudaErrors(cudaSetDevice(use_device));
+        if (pre_use_device != use_device)
+            checkCudaErrors(cudaSetDevice(use_device));
     }
 #endif
 

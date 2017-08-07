@@ -3075,7 +3075,12 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
             // get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
             get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
         }
-        cudaDeviceSynchronize();
+        // synchronize all devices
+        int n_dev = ParallelDescriptor::get_num_devices_used();
+        for (int i = 0; i < n_dev; ++i) {
+            checkCudaErrors(cudaSetDevice(i));
+            checkCudaErrors(cudaDeviceSynchronize());
+        }
 #else // CUDA
 
 #ifdef _OPENMP

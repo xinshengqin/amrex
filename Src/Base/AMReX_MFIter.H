@@ -36,7 +36,12 @@ public:
     * The tile size in this case is defined by FabArrayBase::mfiter_tile_size
     */
     explicit MFIter (const FabArrayBase& fabarray,
-		     unsigned char       flags_=0);
+		     unsigned char       flags_=0
+#ifdef CUDA
+                     ,bool                use_device_ = false
+#endif
+                     );
+
 
     //! Enable tiling with the default tile size, which is defined by FabArrayBase::mfiter_tile_size
     MFIter (const FabArrayBase& fabarray, 
@@ -52,7 +57,7 @@ public:
     MFIter (const BoxArray& ba, const DistributionMapping& dm, bool do_tiling); 
 
     MFIter (const BoxArray& ba, const DistributionMapping& dm,
-	    const IntVect& tilesize, unsigned char flags_=0);
+            const IntVect& tilesize, unsigned char flags_=0);
 
     MFIter (MFIter&& rhs) = default;
 
@@ -140,6 +145,10 @@ protected:
 
     mutable Array<FArrayBox*> registered_fabs;
     mutable Array<int> registered_fabs_indices;
+
+#ifdef CUDA
+    bool use_device;
+#endif
   
     void Initialize ();
 };

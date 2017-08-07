@@ -180,12 +180,8 @@ FabArrayBase::define (const BoxArray&            bxs,
 #ifdef CUDA
     // compute distribution of fabs to different GPUs
     deviceArray.assign(indexArray.size(),-1);
-    int num_gpus = 0;
-    cudaGetDeviceCount(&num_gpus);
-    if (num_gpus == 0)
-    {
-        amrex::Error("no devices supporting CUDA.\n");
-    }
+    int num_gpus = ParallelDescriptor::get_num_devices_used();
+    BL_ASSERT(num_gpus >=1);
     if (num_gpus == 1) {
         // use device 0
         std::fill(deviceArray.begin(), deviceArray.end(), 0);

@@ -51,6 +51,15 @@ namespace ParallelDescriptor
     const int myId_notInGroup  = -22;
     const int nProcs_undefined = -33;
     const int notInSidecar  = -44;
+    //
+    // for using GPUs
+    //
+#ifdef CUDA
+    int nDevices_used;
+    int get_num_devices_used() {
+        return nDevices_used;
+    }
+#endif
 
 #ifdef BL_USE_MPI
     //

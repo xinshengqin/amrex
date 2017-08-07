@@ -142,6 +142,11 @@ namespace ParallelDescriptor
     extern Array<int> m_nProcs_sidecar;
     extern int nSidecars;
     extern int inWhichSidecar;
+    
+    // for using GPUs
+#ifdef CUDA
+    extern int nDevices_used;
+#endif
 
     //! return the rank number local to the comp or sidecar groups
     inline int
@@ -825,6 +830,11 @@ namespace ParallelDescriptor
 			  const MPI_Comm &comm = Communicator() );
     void IProbe(int src_pid, int tag, int &mflag, MPI_Status &status);
     void IProbe(int src_pid, int tag, MPI_Comm comm, int &mflag, MPI_Status &status);
+
+    // for using GPUs
+#ifdef CUDA
+    int get_num_devices_used();
+#endif
 }
 }
 

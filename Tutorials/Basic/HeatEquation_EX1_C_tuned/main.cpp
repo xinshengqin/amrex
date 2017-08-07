@@ -53,7 +53,7 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
-    for ( MFIter mfi(old_phi); mfi.isValid(); ++mfi )
+    for ( MFIter mfi(old_phi,0,true); mfi.isValid(); ++mfi )
     {
         int idx = mfi.LocalIndex();
         const Box& bx = mfi.validbox();
@@ -66,7 +66,6 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 
 #ifdef CUDA_ARRAY
         // use aligned GPU memory
-        checkCudaErrors(cudaSetDevice(old_phi[mfi].deviceID()));
         advance_c_align(lo[0],lo[1],hi[0],hi[1],
                 old_phi[mfi].devicePtr(), 
                 old_phi[mfi].loVect()[0], old_phi[mfi].loVect()[1],
@@ -76,7 +75,6 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
                 new_phi[mfi].hiVect()[0], new_phi[mfi].hiVect()[1],
                 dx[0], dx[1], dt, idx, old_phi[mfi].getPitch());
 #else
-        checkCudaErrors(cudaSetDevice(old_phi[mfi].deviceID()));
         advance_c(lo[0],lo[1],hi[0],hi[1],
         // advance_c_shared(lo[0],lo[1],hi[0],hi[1],
         // advance_c_2x2(lo[0],lo[1],hi[0],hi[1],
@@ -113,11 +111,6 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 
     }
 
-
-#ifdef CUDA
-    gpu_synchronize();
-#endif
-
 }
 
 void main_main ()
@@ -145,7 +138,7 @@ void main_main ()
         plot_int = -1;
         pp.query("plot_int",plot_int);
 
-        // Default nsteps to 0, allow us to set it to something else in the inputs file
+        // Default nsteps to 10, allow us to set it to something else in the inputs file
         nsteps = 10;
         pp.query("nsteps",nsteps);
     }
@@ -197,9 +190,6 @@ void main_main ()
     phi_old->setVal(0.0);
     phi_new->setVal(0.0);
 
-    // Initialize phi_new by calling a Fortran routine.
-    // MFIter = MultiFab Iterator
-    // for ( MFIter mfi(*phi_new); mfi.isValid(); ++mfi )
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
@@ -245,7 +235,7 @@ void main_main ()
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
-    for ( MFIter mfi(*phi_old); mfi.isValid(); ++mfi )
+    for ( MFIter mfi(*phi_old,0,true); mfi.isValid(); ++mfi )
     {
         const Box& bx = mfi.validbox();
         (*phi_old)[mfi].initialize_device();
@@ -255,7 +245,6 @@ void main_main ()
         // copy to device the 1st time
         // (*phi_old)[mfi].toDevice();
     }
-    gpu_synchronize();
 #endif
 
     for (int n = 1; n <= nsteps; ++n)
@@ -275,13 +264,12 @@ void main_main ()
 // #ifdef _OPENMP
 // #pragma omp parallel
 // #endif
-//             for ( MFIter mfi(*phi_new); mfi.isValid(); ++mfi )
+//             for ( MFIter mfi(*phi_new,0,true); mfi.isValid(); ++mfi )
 //             {
 //                 const Box& bx = mfi.validbox();
 //                 // copy to host the 1st time
 //                 (*phi_new)[mfi].toHost();
 //             }
-//             gpu_synchronize();
 // 
 // #endif
             const std::string& pltfile = amrex::Concatenate("plt",n,5);

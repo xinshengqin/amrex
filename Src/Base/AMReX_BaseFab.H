@@ -944,6 +944,11 @@ protected:
                       const Box&        destbox,
                       int               destcomp,
                       int               numcomp);
+    bool right_GPU_is_used() { 
+        int gpu_used = -1;
+        checkCudaErrors(cudaGetDevice(&gpu_used));
+        return (gpu_used == device_id);
+    }
 #endif
 
     //! This function is called by the BaseFab setVal operations.
@@ -2891,6 +2896,7 @@ BaseFab<T>::toDevice(int idx)
 {
     size_t sz = nBytes();
 #ifdef CUDA
+    BL_ASSERT(right_GPU_is_used());
 
 #ifdef CUDA_UM
     gpu_htod_memprefetch_async(dptr, &sz, &idx, &device_id);
@@ -2918,6 +2924,7 @@ BaseFab<T>::toHost(int idx)
 {
     size_t sz = nBytes();
 #ifdef CUDA
+    BL_ASSERT(right_GPU_is_used());
 #ifdef CUDA_UM
     gpu_dtoh_memprefetch_async(dptr, &sz, &idx, &device_id);
 #else
