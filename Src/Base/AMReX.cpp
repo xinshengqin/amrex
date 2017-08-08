@@ -332,48 +332,6 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse, MPI_Comm mpi_
 		   << " OMP threads\n";
 #endif
 
-#ifdef CUDA
-    // set device
-    int device_count;  
-    checkCudaErrors(cudaGetDeviceCount(&device_count));
-    if (device_count == 0)
-    {
-        amrex::Error("no devices supporting CUDA.\n");
-    }
-    amrex::Print() << "Found " << device_count << " NVIDIA GPUs." << std::endl;
-    ParmParse pp;
-    ParallelDescriptor::nDevices_used = device_count; // use all available devices by default
-    pp.query("nDevices", ParallelDescriptor::nDevices_used); // can also read from input files
-    amrex::Print() << "Using " <<  ParallelDescriptor::get_num_devices_used() << " of " << device_count << " NVIDIA GPUs." << std::endl;
-#ifdef BL_USE_MPI
-    int device_rank = ParallelDescriptor::MyProc()%device_count;
-    std::string name = "MPI RANK " + std::to_string(ParallelDescriptor::MyProc());
-    checkCudaErrors(cudaSetDevice(device_rank));
-    // call cudaDeviceSynchronize to create CUDA primary context
-    // associate with this MPI rank
-    // and name the contexts for NVVP
-    cudaDeviceSynchronize();
-    CUcontext ctx;
-    cuCtxGetCurrent( &ctx );
-    nvtxNameCuContextA( ctx, name.c_str() );
-#else
-    // use device 0 by default
-    checkCudaErrors(cudaSetDevice(0));
-    amrex::Print() << "Set default device to 0" << std::endl;
-#endif
-
-#ifdef BL_USE_FLOAT
-    checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeFourByte));
-#else
-    checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte));
-#endif
-
-    // Initialize CUDA streams in fortran subroutine.
-    initialize_cuda();
-
-
-    amrex::Print() << "CUDA initialized.\n";
-#endif // CUDA
 
     signal(SIGSEGV, BLBackTrace::handler); // catch seg falult
     signal(SIGINT,  BLBackTrace::handler);
@@ -421,6 +379,50 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse, MPI_Comm mpi_
 #endif
 #endif
     }
+
+#ifdef CUDA
+    // set device
+    int device_count;  
+    checkCudaErrors(cudaGetDeviceCount(&device_count));
+    if (device_count == 0)
+    {
+        amrex::Error("no devices supporting CUDA.\n");
+    }
+    amrex::Print() << "Found " << device_count << " NVIDIA GPUs." << std::endl;
+    ParmParse pp;
+    ParallelDescriptor::nDevices_used = device_count; // use all available devices by default
+    int test;
+    pp.query("nDevices", ParallelDescriptor::nDevices_used); // can also read from input files
+    amrex::Print() << "Using " <<  ParallelDescriptor::get_num_devices_used() << " of " << device_count << " NVIDIA GPUs." << std::endl;
+#ifdef BL_USE_MPI
+    int device_rank = ParallelDescriptor::MyProc()%device_count;
+    std::string name = "MPI RANK " + std::to_string(ParallelDescriptor::MyProc());
+    checkCudaErrors(cudaSetDevice(device_rank));
+    // call cudaDeviceSynchronize to create CUDA primary context
+    // associate with this MPI rank
+    // and name the contexts for NVVP
+    cudaDeviceSynchronize();
+    CUcontext ctx;
+    cuCtxGetCurrent( &ctx );
+    nvtxNameCuContextA( ctx, name.c_str() );
+#else
+    // use device 0 by default
+    checkCudaErrors(cudaSetDevice(0));
+    amrex::Print() << "Set default device to 0" << std::endl;
+#endif
+
+#ifdef BL_USE_FLOAT
+    checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeFourByte));
+#else
+    checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte));
+#endif
+
+    // Initialize CUDA streams in fortran subroutine.
+    initialize_cuda();
+
+
+    amrex::Print() << "CUDA initialized.\n";
+#endif // CUDA
 
     ParallelDescriptor::StartTeams();
 
