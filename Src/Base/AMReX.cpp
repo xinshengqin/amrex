@@ -228,11 +228,16 @@ amrex::Warning (const std::string& msg)
     Warning(msg.c_str());
 }
 
+#ifdef CUDA
+    __device__
+    __host__
+#endif
 void
 amrex::Assert (const char* EX,
                 const char* file,
                 int         line)
 {
+#ifndef  __CUDA_ARCH__
     const int N = 512;
 
     char buf[N];
@@ -247,6 +252,7 @@ amrex::Assert (const char* EX,
     write_to_stderr_without_buffering(buf);
 
     ParallelDescriptor::Abort();
+#endif
 }
 
 namespace
