@@ -90,9 +90,15 @@ public:
     //! Returns a reference to the i'th coordinate of the IntVect.
     // dtor, copy-ctor, copy-op=, move-ctor, and move-op= are compiler generated.
 
+#ifdef CUDA
+    __device__ __host__
+#endif
     int& operator[] (int i) { BL_ASSERT(i>=0 && i < BL_SPACEDIM); return vect[i]; }
 
     //! Returns the i'th coordinate of the IntVect.
+#ifdef CUDA
+    __device__ __host__
+#endif
     const int& operator[] (int i) const { BL_ASSERT(i>=0 && i < BL_SPACEDIM); return vect[i]; }
 
     //! Set i'th coordinate of IntVect to val.
@@ -105,7 +111,13 @@ public:
     * \brief Returns a const pointer to an array of coordinates of the
     * IntVect.  Useful for arguments to FORTRAN calls.
     */
+#ifdef CUDA
+    __device__ __host__
+#endif
     const int* getVect () const& { return vect; }
+#ifdef CUDA
+    __device__ __host__
+#endif
     int*       getVect () &      { return vect; }
     int*       getVect () && = delete;
 

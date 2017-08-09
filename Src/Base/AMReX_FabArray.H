@@ -42,7 +42,20 @@
 #include <AMReX_MakeType.H>
 #include <AMReX_TypeTraits.H>
 
+#ifdef CUDA
+#include <AMReX_CUDA_helper.H>
+#include <AMReX_Device.H>
+#include <AMReX_Kernels.H>
+#endif
+
+#include <AMReX_FArrayBox.H>
+#include <AMReX.H>
 namespace amrex {
+    template<class FAB> class FabArray;
+    template<class FAB>
+    void fill_bc_d2d(typename FabArray<FAB>::CopyComTagDevice* tags, int n_tags, int scomp, int ncomp) {
+        return;
+    }
 
 /*
   A Collection of Fortran Array-like Objects
@@ -114,11 +127,14 @@ struct MFInfo {
     MFInfo& SetDevice(bool d) { device = d; return *this; }
 };
 
+class FArrayBox;
+
 template <class FAB>
 class FabArray
     :
     public FabArrayBase
 {
+
 public:
 
     struct FABType {
@@ -163,6 +179,30 @@ public:
     FabArray (const FabArray<FAB>& rhs) = delete;
     FabArray<FAB>& operator= (const FabArray<FAB>& rhs) = delete;
     FabArray<FAB>& operator= (FabArray<FAB>&& rhs) = delete;
+
+#ifdef CUDA
+    // CopyComTag for d2d communication
+public:
+    class CopyComTagDevice {
+        public:
+        CopyComTagDevice(FAB& dst, FAB& src, const Box& dbox_, const Box& sbox_):
+            sbox(sbox_),
+            dbox(dbox_), 
+            sfab_data_pt_d(src.devicePtr()),
+            dfab_data_pt_d(dst.devicePtr()),
+            sfab_box(src.smallEnd(),src.bigEnd()),
+            dfab_box(dst.smallEnd(),dst.bigEnd())
+        {}
+        // data members
+        value_type* sfab_data_pt_d;
+        value_type* dfab_data_pt_d;
+        Box sfab_box;
+        Box dfab_box;
+        Box sbox;
+        Box dbox;
+    };
+#endif
+
 
     /**
     * \brief Define this FabArray identically to that performed by
@@ -3065,22 +3105,48 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
 	int N_loc = (*TheFB.m_LocTags).size();
 
 #ifdef CUDA
+        // or do it all on device
+        // TODO: this can be move to getFB so these operation only have to be done after regrid.
+        CopyComTagDevice* arrayOfCopyComTagDevice = reinterpret_cast<CopyComTagDevice*>(malloc(sizeof(CopyComTagDevice)*N_loc));
+        CopyComTagDevice* arrayOfCopyComTagDevice_d = 0;
+        checkCudaErrors(cudaHostAlloc(&arrayOfCopyComTagDevice, sizeof(CopyComTagDevice)*N_loc, cudaHostAllocDefault));
 	for (int i=0; i<N_loc; ++i)
         {
             const CopyComTag& tag = (*TheFB.m_LocTags)[i];
+            arrayOfCopyComTagDevice[i] = CopyComTagDevice(get(tag.dstIndex), get(tag.srcIndex), tag.dbox, tag.sbox);
+        }
+        checkCudaErrors(cudaMemcpy(arrayOfCopyComTagDevice_d, arrayOfCopyComTagDevice, sizeof(CopyComTagDevice) * N_loc, cudaMemcpyHostToDevice));
+        // TODO: for now always use strema 0 on device 0
+        // TODO: assumed max size is sbox is 600 for now
+        const int max_size = 600;
+        dim3 blockSize(256,1,1);
+        dim3 gridSize( (max_size + blockSize.x - 1) / blockSize.x, 
+                       N_loc, 
+                       1 
+                     );
+        // amrex::fill_bc_d2d<FAB><<<gridSize, blockSize, 0, 0>>>(arrayOfCopyComTagDevice_d, N_loc, scomp, ncomp);
+        fill_bc_d2d<FAB>(arrayOfCopyComTagDevice_d, N_loc, scomp, ncomp);
+        getLastCudaError("fill_bc_d2d kernel execution failed.\n");
 
-            BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
-            BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
-            // don't transfer data back to CPU to fill ghost cells
-            // get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
-            get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
-        }
+        delete[] arrayOfCopyComTagDevice;
+        cudaFree(arrayOfCopyComTagDevice_d);
+
+	// for (int i=0; i<N_loc; ++i)
+        // {
+        //     const CopyComTag& tag = (*TheFB.m_LocTags)[i];
+
+        //     BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
+        //     BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
+        //     // don't transfer data back to CPU to fill ghost cells
+        //     // get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+        //     get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+        // }
         // synchronize all devices
-        int n_dev = ParallelDescriptor::get_num_devices_used();
-        for (int i = 0; i < n_dev; ++i) {
-            checkCudaErrors(cudaSetDevice(i));
-            checkCudaErrors(cudaDeviceSynchronize());
-        }
+        // int n_dev = ParallelDescriptor::get_num_devices_used();
+        // for (int i = 0; i < n_dev; ++i) {
+        //     checkCudaErrors(cudaSetDevice(i));
+        //     checkCudaErrors(cudaDeviceSynchronize());
+        // }
 #else // CUDA
 
 #ifdef _OPENMP

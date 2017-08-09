@@ -247,9 +247,15 @@ public:
     int length (int dir) const { return bigend[dir] - smallend[dir] + 1; }
 
     //! Returns a constant pointer the array of low end coordinates. Useful for calls to FORTRAN.
+#ifdef CUDA
+    __host__ __device__
+#endif
     const int* loVect () const& { return smallend.getVect(); }
     const int* loVect () && = delete;
     //! Returns a constant pointer the array of high end coordinates. Useful for calls to FORTRAN.
+#ifdef CUDA
+    __host__ __device__
+#endif
     const int* hiVect () const& { return bigend.getVect(); }
     const int* hiVect () && = delete;
 

@@ -137,6 +137,8 @@ C$(AMREX_BASE)_sources += AMReX_Device.cpp
 
 ifeq ($(USE_CUDA),TRUE)
   F90$(AMREX_BASE)_sources += AMReX_CUDA.F90
+  C$(AMREX_BASE)_sources += AMReX_Kernels.cpp
+  C$(AMREX_BASE)_headers += AMReX_Kernels.H
 endif
 
 ifeq ($(LAZY),TRUE)
