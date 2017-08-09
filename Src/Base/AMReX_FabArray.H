@@ -42,20 +42,17 @@
 #include <AMReX_MakeType.H>
 #include <AMReX_TypeTraits.H>
 
+#include <AMReX_FArrayBox.H>
+#include <AMReX.H>
+
 #ifdef CUDA
 #include <AMReX_CUDA_helper.H>
 #include <AMReX_Device.H>
 #include <AMReX_Kernels.H>
+#define ARRAY_2D(PHI, LO_X, LO_Y, HI_X, HI_Y, I, J) PHI[(J-LO_Y)*(HI_X-LO_X+1)+I-LO_X]
 #endif
 
-#include <AMReX_FArrayBox.H>
-#include <AMReX.H>
 namespace amrex {
-    template<class FAB> class FabArray;
-    template<class FAB>
-    void fill_bc_d2d(typename FabArray<FAB>::CopyComTagDevice* tags, int n_tags, int scomp, int ncomp) {
-        return;
-    }
 
 /*
   A Collection of Fortran Array-like Objects
@@ -128,6 +125,9 @@ struct MFInfo {
 };
 
 class FArrayBox;
+template<class FAB>
+__global__
+void fill_bc_d2d(typename FabArray<FAB>::CopyComTagDevice* tags, int n_tags, int scomp, int ncomp); 
 
 template <class FAB>
 class FabArray
@@ -3105,16 +3105,17 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
 	int N_loc = (*TheFB.m_LocTags).size();
 
 #ifdef CUDA
-        // or do it all on device
+        // We pack all info in m_LocTags and launch only one CUDA kernel to copy all boxes needed
         // TODO: this can be move to getFB so these operation only have to be done after regrid.
         CopyComTagDevice* arrayOfCopyComTagDevice = reinterpret_cast<CopyComTagDevice*>(malloc(sizeof(CopyComTagDevice)*N_loc));
         CopyComTagDevice* arrayOfCopyComTagDevice_d = 0;
-        checkCudaErrors(cudaHostAlloc(&arrayOfCopyComTagDevice, sizeof(CopyComTagDevice)*N_loc, cudaHostAllocDefault));
+        checkCudaErrors(cudaMalloc(&arrayOfCopyComTagDevice_d, sizeof(CopyComTagDevice)*N_loc));
 	for (int i=0; i<N_loc; ++i)
         {
             const CopyComTag& tag = (*TheFB.m_LocTags)[i];
             arrayOfCopyComTagDevice[i] = CopyComTagDevice(get(tag.dstIndex), get(tag.srcIndex), tag.dbox, tag.sbox);
         }
+
         checkCudaErrors(cudaMemcpy(arrayOfCopyComTagDevice_d, arrayOfCopyComTagDevice, sizeof(CopyComTagDevice) * N_loc, cudaMemcpyHostToDevice));
         // TODO: for now always use strema 0 on device 0
         // TODO: assumed max size is sbox is 600 for now
@@ -3124,8 +3125,7 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
                        N_loc, 
                        1 
                      );
-        // amrex::fill_bc_d2d<FAB><<<gridSize, blockSize, 0, 0>>>(arrayOfCopyComTagDevice_d, N_loc, scomp, ncomp);
-        fill_bc_d2d<FAB>(arrayOfCopyComTagDevice_d, N_loc, scomp, ncomp);
+        fill_bc_d2d<FAB><<<gridSize, blockSize, 0, 0>>>(arrayOfCopyComTagDevice_d, N_loc, scomp, ncomp);
         getLastCudaError("fill_bc_d2d kernel execution failed.\n");
 
         delete[] arrayOfCopyComTagDevice;
@@ -3141,7 +3141,7 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
         //     // get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
         //     get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
         // }
-        // synchronize all devices
+        // // synchronize all devices
         // int n_dev = ParallelDescriptor::get_num_devices_used();
         // for (int i = 0; i < n_dev; ++i) {
         //     checkCudaErrors(cudaSetDevice(i));

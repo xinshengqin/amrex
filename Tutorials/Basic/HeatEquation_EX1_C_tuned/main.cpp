@@ -60,7 +60,7 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 #if (BL_SPACEDIM == 2)
 #ifdef CUDA
         // copy old solution from host to device
-        old_phi[mfi].toDevice(idx);
+        // old_phi[mfi].toDevice(idx);
         const int* lo = bx.loVect();
         const int* hi = bx.hiVect();
 
@@ -87,10 +87,24 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
                 new_phi[mfi].hiVect()[0], new_phi[mfi].hiVect()[1],
                 dx[0], dx[1], dt, idx, 
                 old_phi[mfi].deviceID());
+
+        // SimpleFAB* old_phi_fab_pt = new SimpleFAB(old_phi[mfi]);
+        // SimpleFAB* new_phi_fab_pt = new SimpleFAB(new_phi[mfi]);
+        // SimpleFAB* old_phi_fab_pt_d = 0;
+        // SimpleFAB* new_phi_fab_pt_d = 0;
+        // cudaMalloc(&old_phi_fab_pt_d, sizeof(SimpleFAB));
+        // cudaMalloc(&new_phi_fab_pt_d, sizeof(SimpleFAB));
+        // cudaMemcpy(old_phi_fab_pt_d, old_phi_fab_pt, sizeof(SimpleFAB), cudaMemcpyHostToDevice);
+        // cudaMemcpy(new_phi_fab_pt_d, new_phi_fab_pt, sizeof(SimpleFAB), cudaMemcpyHostToDevice);
+        // advance_c(lo[0],lo[1],hi[0],hi[1],
+        //           old_phi_fab_pt_d,
+        //           new_phi_fab_pt_d,
+        //           dx[0], dx[1], dt, idx, 
+        //           old_phi[mfi].deviceID());
 #endif // CUDA_ARRAY
 
         // copy updated solution from device to host
-        new_phi[mfi].toHost(idx);
+        // new_phi[mfi].toHost(idx);
 #else
         const int* lo = bx.loVect();
         const int* hi = bx.hiVect();
@@ -243,7 +257,7 @@ void main_main ()
         flux[0][mfi].initialize_device();
         flux[1][mfi].initialize_device();
         // copy to device the 1st time
-        // (*phi_old)[mfi].toDevice();
+        (*phi_old)[mfi].toDevice();
     }
 #endif
 
@@ -260,18 +274,18 @@ void main_main ()
         // Write a plotfile of the current data (plot_int was defined in the inputs file)
         if (plot_int > 0 && n%plot_int == 0)
         {
-// #ifdef CUDA
-// #ifdef _OPENMP
-// #pragma omp parallel
-// #endif
-//             for ( MFIter mfi(*phi_new,0,true); mfi.isValid(); ++mfi )
-//             {
-//                 const Box& bx = mfi.validbox();
-//                 // copy to host the 1st time
-//                 (*phi_new)[mfi].toHost();
-//             }
-// 
-// #endif
+#ifdef CUDA
+#ifdef _OPENMP
+#pragma omp parallel
+#endif
+            for ( MFIter mfi(*phi_new,0,true); mfi.isValid(); ++mfi )
+            {
+                const Box& bx = mfi.validbox();
+                // copy to host the 1st time
+                (*phi_new)[mfi].toHost();
+            }
+
+#endif
             const std::string& pltfile = amrex::Concatenate("plt",n,5);
             WriteSingleLevelPlotfile(pltfile, *phi_new, {"phi"}, geom, time, n);
         }
