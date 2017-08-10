@@ -24,6 +24,9 @@ namespace amrex
     std::string Version ();
 
     void Initialize (int& argc, char**& argv, bool build_parm_parse=true, MPI_Comm mpi_comm = MPI_COMM_WORLD);
+#ifdef CUDA
+    void Initialize_cuda_c();
+#endif
 
     void Finalize(bool finalize_parallel = true);
     /**

@@ -7,6 +7,7 @@
 #include <new>
 #include <stack>
 #include <limits>
+#include <vector>
 
 #include <AMReX.H>
 #include <AMReX_ParallelDescriptor.H>
@@ -386,47 +387,12 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse, MPI_Comm mpi_
 #endif
     }
 
+// all CUDA Initialization stuff
 #ifdef CUDA
-    // set device
-    int device_count;  
-    checkCudaErrors(cudaGetDeviceCount(&device_count));
-    if (device_count == 0)
-    {
-        amrex::Error("no devices supporting CUDA.\n");
-    }
-    amrex::Print() << "Found " << device_count << " NVIDIA GPUs." << std::endl;
-    ParmParse pp;
-    ParallelDescriptor::nDevices_used = device_count; // use all available devices by default
-    int test;
-    pp.query("nDevices", ParallelDescriptor::nDevices_used); // can also read from input files
-    amrex::Print() << "Using " <<  ParallelDescriptor::get_num_devices_used() << " of " << device_count << " NVIDIA GPUs." << std::endl;
-#ifdef BL_USE_MPI
-    int device_rank = ParallelDescriptor::MyProc()%device_count;
-    std::string name = "MPI RANK " + std::to_string(ParallelDescriptor::MyProc());
-    checkCudaErrors(cudaSetDevice(device_rank));
-    // call cudaDeviceSynchronize to create CUDA primary context
-    // associate with this MPI rank
-    // and name the contexts for NVVP
-    cudaDeviceSynchronize();
-    CUcontext ctx;
-    cuCtxGetCurrent( &ctx );
-    nvtxNameCuContextA( ctx, name.c_str() );
-#else
-    // use device 0 by default
-    checkCudaErrors(cudaSetDevice(0));
-    amrex::Print() << "Set default device to 0" << std::endl;
-#endif
-
-#ifdef BL_USE_FLOAT
-    checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeFourByte));
-#else
-    checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte));
-#endif
-
+    // Initialize CUDA with CUDA C
+    Initialize_cuda_c();
     // Initialize CUDA streams in fortran subroutine.
     initialize_cuda();
-
-
     amrex::Print() << "CUDA initialized.\n";
 #endif // CUDA
 
@@ -474,6 +440,149 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse, MPI_Comm mpi_
     MemProfiler_f::initialize();
 #endif
 }
+
+#ifdef CUDA
+void 
+amrex::Initialize_cuda_c()
+{
+    int device_count;  
+    checkCudaErrors(cudaGetDeviceCount(&device_count));
+    if (device_count == 0)
+    {
+        amrex::Abort("no devices supporting CUDA.\n");
+    }
+
+    amrex::Print() << "Found " << device_count << " NVIDIA GPUs." << std::endl;
+    ParmParse pp;
+    ParallelDescriptor::nDevices_used = device_count; // use all available devices by default
+    int test;
+    pp.query("nDevices", ParallelDescriptor::nDevices_used); // can also read from input files
+    if (ParallelDescriptor::nDevices_used > 0 && ParallelDescriptor::nDevices_used <= device_count) 
+        amrex::Print() << "Using " <<  ParallelDescriptor::get_num_devices_used() << " of " << device_count << " NVIDIA GPUs." << std::endl;
+    else
+        amrex::Abort("The nDevices parameter specified in input file is not in a proper range");
+
+#ifdef BL_USE_MPI
+    int device_rank = ParallelDescriptor::MyProc()%device_count;
+    std::string name = "MPI RANK " + std::to_string(ParallelDescriptor::MyProc());
+    checkCudaErrors(cudaSetDevice(device_rank));
+    // call cudaDeviceSynchronize to create CUDA primary context
+    // associate with this MPI rank
+    // and name the contexts for NVVP
+    cudaDeviceSynchronize();
+    CUcontext ctx;
+    cuCtxGetCurrent( &ctx );
+    nvtxNameCuContextA( ctx, name.c_str() );
+#else
+    // use device 0 by default
+    checkCudaErrors(cudaSetDevice(0));
+    amrex::Print() << "Set default device to 0" << std::endl;
+#endif
+
+#ifdef BL_USE_FLOAT
+    checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeFourByte));
+#else
+    checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte));
+#endif
+
+
+// use GPU peer-2-peer communication
+// If this option is on, we assume every two devices have p2p access with each other
+#ifdef P2P 
+    int nDevices_used = ParallelDescriptor::get_num_devices_used();
+    if (nDevices_used < 2)
+        amrex::Abort("Two or more GPUs with SM 2.0 or higher capability are required for p2p access");
+
+    // Query device properties
+    std::vector<cudaDeviceProp> prop(nDevices_used, cudaDeviceProp());
+
+    for (int i=0; i < nDevices_used; ++i)
+    {
+        checkCudaErrors(cudaGetDeviceProperties(&prop[i], i));
+
+        // Only boards based on Fermi can support P2P
+        if ((prop[i].major >= 2)
+        {
+            // This is an array of P2P capable GPUs
+            printf("> GPU%d = \"%15s\" is capable of Peer-to-Peer (P2P)\n", i, prop[i].name);
+        }
+        else {
+            printf("> GPU%d = \"%15s\" is NOT capable of Peer-to-Peer (P2P)\n", i, prop[i].name);
+            amrex::Abort("Not all GPUs used are capable of Peer-to-Peer (P2P)");
+        }
+
+    }
+    
+#if CUDART_VERSION >= 4000
+    // Check possibility for peer access
+    int can_access_peer;
+    int p2pCapableGPUs[2]; 
+
+    // Show all the combinations of supported P2P GPUs
+    bool all_p2p = true;
+    for (int i = 0; i < nDevices_used; i++)
+    {
+        for (int j = 0; j < nDevices_used ; j++)
+        {
+            if (i == j)
+            {
+                continue;
+            }
+            checkCudaErrors(cudaDeviceCanAccessPeer(&can_access_peer, i, j));
+            printf("> Peer access from %s (GPU%d) -> %s (GPU%d) : %s\n", prop[i].name, i,
+                           prop[j].name, j ,
+                           can_access_peer ? "Yes" : "No");
+            if (0 == can_access_peer) all_p2p = false;
+        }
+    }
+
+    if (!all_p2p)
+    {
+        amrex::Abort("Not every 2 GPUs can P2P access each other");
+    }
+
+
+    // Enable peer access
+    for (int i = 0; i < ; i++)
+    {
+        checkCudaErrors(cudaSetDevice(i));
+        for (int j = 0; j < n_p2p_gpu; j++){
+            if (i == j)
+            {
+                continue;
+            }
+            printf("Enabling peer access between GPU%d and GPU%d...\n", i, j);
+            checkCudaErrors(cudaDeviceEnablePeerAccess(j, 0));
+        }
+    }
+
+    // Check that we got UVA on both devices
+    printf("Checking for UVA capabilities...\n");
+    bool all_have_uva = true;
+    for (int i = 0; i < n_p2p_gpu; i++) {
+        printf("> %s (GPU%d) supports UVA: %s\n", prop[i].name, i, (prop[i].unifiedAddressing ? "Yes" : "No"));
+        if (0 == prop[i].unifiedAddressing) all_have_uva = false; 
+    }
+
+    if (all_has_uva)
+    {
+        printf("All GPUs can support UVA, enabling...\n");
+    }
+    else
+    {
+        amrex::Abort("At least one of the two GPUs does NOT support UVA\n");
+    }
+
+
+
+#else // Using CUDA 3.2 or older
+    amrex::Abort("CUDA peer-2-peer requires CUDA 4.0 to build and run\n");
+#endif
+
+#endif
+
+}
+#endif
 
 void
 amrex::Finalize (bool finalize_parallel)
@@ -553,14 +662,18 @@ amrex::Finalize (bool finalize_parallel)
 
 // clean up CUDA staff
 #ifdef CUDA
-    // Fortran side clean up
+    // Fortran side clean-up
     finalize_cuda();
-    // cudaDeviceReset causes the driver to clean up all state. While
-    // not mandatory in normal operation, it is good practice.  It is also
-    // needed to ensure correct operation when the application is being
-    // profiled. Calling cudaDeviceReset causes all profile data to be
-    // flushed before the application exits
-    checkCudaErrors(cudaDeviceReset());
+    // CPU side clean-up 
+    int nDevices_used = ParallelDescriptor::get_num_devices_used();
+    for (int i = 0; i < nDevices_used; ++i) {
+        checkCudaErrors(cudaSetDevice(i));
+#ifdef P2P
+        checkCudaErrors(cudaDeviceDisablePeerAccess(i));
+#endif
+        checkCudaErrors(cudaDeviceReset());
+    }
+
 #endif
 }
 

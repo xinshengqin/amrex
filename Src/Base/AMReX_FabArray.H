@@ -124,9 +124,6 @@ struct MFInfo {
     MFInfo& SetDevice(bool d) { device = d; return *this; }
 };
 
-// template<typename T>
-// __global__
-// void fill_bc_d2d(FabArrayBase::CopyComTagDevice* tags, int n_tags, int scomp, int ncomp); 
 
 template <class FAB>
 class FabArray
@@ -3083,38 +3080,38 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
 
 #ifdef CUDA
         // We pack all info in m_LocTags and launch only one CUDA kernel to copy all boxes needed
-        long max_size = 0;
-	for (int i=0; i<N_loc; ++i)
-        {
-            const CopyComTag& tag = (*TheFB.m_LocTags)[i];
-            FAB& dfab = get(tag.dstIndex);
-            FAB& sfab = get(tag.srcIndex);
-            (TheFB.m_LocTagsDevice)[i] = CopyComTagDevice(dfab.devicePtr(), sfab.devicePtr(), dfab.box(), sfab.box(), tag.dbox, tag.sbox);
-            max_size = std::max(max_size, tag.dbox.numPts());
-        }
-        checkCudaErrors(cudaMemcpy(TheFB.m_LocTagsDevice_d, TheFB.m_LocTagsDevice, sizeof(CopyComTagDevice) * N_loc, cudaMemcpyHostToDevice));
-        dim3 blockSize(256,1,1);
-        dim3 gridSize( (max_size + blockSize.x - 1) / blockSize.x, 
-                       N_loc, 
-                       1 
-                     );
-        // TODO: can I get what data type (int, float etc.) is used for the the data in FAB?
-        // such that I can pass that to instantiate this template function
-        fill_bc_d2d<amrex::Real><<<gridSize, blockSize>>>(TheFB.m_LocTagsDevice_d, N_loc, scomp, ncomp);
-        getLastCudaError("fill_bc_d2d kernel execution failed.\n");
-
-
+        // long max_size = 0;
 	// for (int i=0; i<N_loc; ++i)
         // {
         //     const CopyComTag& tag = (*TheFB.m_LocTags)[i];
-
-        //     BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
-        //     BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
-        //     // don't transfer data back to CPU to fill ghost cells
-        //     // get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
-        //     get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+        //     FAB& dfab = get(tag.dstIndex);
+        //     FAB& sfab = get(tag.srcIndex);
+        //     (TheFB.m_LocTagsDevice)[i] = CopyComTagDevice(dfab.devicePtr(), sfab.devicePtr(), dfab.box(), sfab.box(), tag.dbox, tag.sbox);
+        //     max_size = std::max(max_size, tag.dbox.numPts());
         // }
-        //
+        // checkCudaErrors(cudaMemcpy(TheFB.m_LocTagsDevice_d, TheFB.m_LocTagsDevice, sizeof(CopyComTagDevice) * N_loc, cudaMemcpyHostToDevice));
+        // dim3 blockSize(256,1,1);
+        // dim3 gridSize( (max_size + blockSize.x - 1) / blockSize.x, 
+        //                N_loc, 
+        //                1 
+        //              );
+        // // TODO: can I get what data type (int, float etc.) is used for the the data in FAB?
+        // // such that I can pass that to instantiate this template function
+        // fill_bc_d2d<amrex::Real><<<gridSize, blockSize>>>(TheFB.m_LocTagsDevice_d, N_loc, scomp, ncomp);
+        // getLastCudaError("fill_bc_d2d kernel execution failed.\n");
+
+
+	for (int i=0; i<N_loc; ++i)
+        {
+            const CopyComTag& tag = (*TheFB.m_LocTags)[i];
+
+            BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
+            BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
+            // don't transfer data back to CPU to fill ghost cells
+            // get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+            get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+        }
+        
         // synchronize all devices
         int n_dev = ParallelDescriptor::get_num_devices_used();
         for (int i = 0; i < n_dev; ++i) {
