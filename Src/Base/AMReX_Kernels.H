@@ -1,6 +1,6 @@
 #ifndef BL_KERNELS_H_ 
 #define BL_KERNELS_H_
-#include <AMReX_FabArray.H>
+#include <AMReX_FabArrayBase.H>
 #define ARRAY_2D(PHI, LO_X, LO_Y, HI_X, HI_Y, I, J) PHI[(J-LO_Y)*(HI_X-LO_X+1)+I-LO_X]
 namespace amrex {
     // template <class FAB> class FabArray;
@@ -9,17 +9,17 @@ namespace amrex {
     // void fill_bc_d2d(TagType<FAB>* tags, int n_tags, int scomp, int ncomp) {return;} 
     //
     // TODO: always assume 2D and ncomp is 1 for now
-    template<class FAB> class FabArray;
-    template<class FAB>
+    // class FabArrayBase;
+    template<typename T>
     __global__
-    void fill_bc_d2d(typename FabArray<FAB>::CopyComTagDevice* tags, int n_tags, int scomp, int ncomp) {
+    void fill_bc_d2d(FabArrayBase::CopyComTagDevice* tags, int n_tags, int scomp, int ncomp) {
         const int i_tag = blockIdx.y;
         const int tid = threadIdx.x + blockDim.x * blockIdx.x;
-        const typename FabArray<FAB>::CopyComTagDevice& tag = tags[i_tag];
+        const FabArrayBase::CopyComTagDevice& tag = tags[i_tag];
         // unpacking
         // TODO: this should be more generic than Real
-        amrex::Real* src = tag.sfab_data_pt_d;
-        amrex::Real* dst = tag.dfab_data_pt_d;
+        T* src = (T*) tag.sfab_data_pt_d;
+        T* dst = (T*) tag.dfab_data_pt_d;
         const int sfab_lox = tag.sfab_box.loVect()[0];
         const int sfab_loy = tag.sfab_box.loVect()[1];
         const int sfab_hix = tag.sfab_box.hiVect()[0];

@@ -170,6 +170,31 @@ public:
     //
     static long bytesOfMapOfCopyComTagContainers (const MapOfCopyComTagContainers&);
 
+#ifdef CUDA
+    // CopyComTag for d2d communication
+    // This is analogous to CopyComTag but is has info specific for CUDA kernels
+    struct CopyComTagDevice 
+    {
+        CopyComTagDevice(void* dst_data_d, void* src_data_d, 
+                const Box& dfab_box_, const Box& sfab_box_, 
+                const Box& dbox_, const Box& sbox_):
+            dfab_data_pt_d(dst_data_d),
+            sfab_data_pt_d(src_data_d),
+            dfab_box(dfab_box_),
+            sfab_box(sfab_box_),
+            dbox(dbox_),
+            sbox(sbox_)
+        {}
+        // data members
+        void* dfab_data_pt_d;
+        void* sfab_data_pt_d;
+        Box dfab_box;
+        Box sfab_box;
+        Box dbox;
+        Box sbox;
+    };
+#endif
+
     // Key for unique combination of BoxArray and DistributionMapping
     // Note both BoxArray and DistributionMapping are reference counted.
     // Objects with the same references have the same key.
@@ -470,6 +495,10 @@ protected:
 	int                 m_nuse;
 	//
 	long bytes () const;
+#ifdef CUDA
+        CopyComTagDevice* m_LocTagsDevice;
+        CopyComTagDevice* m_LocTagsDevice_d;
+#endif
     private:
 	void define_fb (const FabArrayBase& fa);
 	void define_epo (const FabArrayBase& fa);
