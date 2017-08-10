@@ -1,6 +1,6 @@
 #
 # Setup for compiling the CUDA version of AMReX with
-# CUDA C, not CUDA Fortran
+# CUDA C
 # Assumes you have set USE_CUDA=TRUE, and have
 # set the variables PGI_PATH to the root PGI
 # directory and CUDA_PATH to the root CUDA directory.
@@ -11,12 +11,15 @@ FC  = pgfortran
 F90 = pgfortran
 
 ifeq ($(USE_MPI),TRUE)
-    CXXFLAGS = -Wno-deprecated-gpu-targets -x cu --std=c++11 -ccbin=mpic++ -O3 -Xptxas=-v
-    CFLAGS   = -Wno-deprecated-gpu-targets -x c -ccbin=mpicc -c99 -O3 -Xptxas=-v
+    CXXFLAGS = -Wno-deprecated-gpu-targets -x cu --std=c++11 -ccbin=mpic++ -O3
+    CFLAGS   = -Wno-deprecated-gpu-targets -x c -ccbin=mpicc -c99 -O3
 else
-    CXXFLAGS = -Wno-deprecated-gpu-targets -x cu --std=c++11 -ccbin=g++ -O3 -Xptxas=-v -dc
-    CFLAGS   = -Wno-deprecated-gpu-targets -x c -ccbin=gcc -c99 -O3 -Xptxas=-v -dc
+    CXXFLAGS = -Wno-deprecated-gpu-targets -x cu --std=c++11 -ccbin=g++ -O3 -dc
+    CFLAGS   = -Wno-deprecated-gpu-targets -x c -ccbin=gcc -c99 -O3 -dc
 endif 
+
+# other options 
+# verbose: -Xptxas=-v
 # CXXFLAGS += -Xptxas -dlcm=ca
 # CFLAGS += -Xptxas -dlcm=ca
 FFLAGS   =
