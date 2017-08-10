@@ -307,6 +307,9 @@ ifeq ($(USE_CUDA),TRUE)
         # but link with pgfortran
         LIBRARIES += -lgomp
     endif
+    ifeq ($(USE_P2P),TRUE)
+        DEFINES += -DP2P
+    endif
 else
     CUDASuffix :=
 endif

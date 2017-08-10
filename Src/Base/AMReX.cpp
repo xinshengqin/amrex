@@ -455,7 +455,6 @@ amrex::Initialize_cuda_c()
     amrex::Print() << "Found " << device_count << " NVIDIA GPUs." << std::endl;
     ParmParse pp;
     ParallelDescriptor::nDevices_used = device_count; // use all available devices by default
-    int test;
     pp.query("nDevices", ParallelDescriptor::nDevices_used); // can also read from input files
     if (ParallelDescriptor::nDevices_used > 0 && ParallelDescriptor::nDevices_used <= device_count) 
         amrex::Print() << "Using " <<  ParallelDescriptor::get_num_devices_used() << " of " << device_count << " NVIDIA GPUs." << std::endl;
@@ -501,7 +500,7 @@ amrex::Initialize_cuda_c()
         checkCudaErrors(cudaGetDeviceProperties(&prop[i], i));
 
         // Only boards based on Fermi can support P2P
-        if ((prop[i].major >= 2)
+        if (prop[i].major >= 2)
         {
             // This is an array of P2P capable GPUs
             printf("> GPU%d = \"%15s\" is capable of Peer-to-Peer (P2P)\n", i, prop[i].name);
@@ -516,7 +515,6 @@ amrex::Initialize_cuda_c()
 #if CUDART_VERSION >= 4000
     // Check possibility for peer access
     int can_access_peer;
-    int p2pCapableGPUs[2]; 
 
     // Show all the combinations of supported P2P GPUs
     bool all_p2p = true;
@@ -543,10 +541,10 @@ amrex::Initialize_cuda_c()
 
 
     // Enable peer access
-    for (int i = 0; i < ; i++)
+    for (int i = 0; i < nDevices_used; i++)
     {
         checkCudaErrors(cudaSetDevice(i));
-        for (int j = 0; j < n_p2p_gpu; j++){
+        for (int j = 0; j < nDevices_used; j++){
             if (i == j)
             {
                 continue;
@@ -559,12 +557,12 @@ amrex::Initialize_cuda_c()
     // Check that we got UVA on both devices
     printf("Checking for UVA capabilities...\n");
     bool all_have_uva = true;
-    for (int i = 0; i < n_p2p_gpu; i++) {
+    for (int i = 0; i < nDevices_used; i++) {
         printf("> %s (GPU%d) supports UVA: %s\n", prop[i].name, i, (prop[i].unifiedAddressing ? "Yes" : "No"));
         if (0 == prop[i].unifiedAddressing) all_have_uva = false; 
     }
 
-    if (all_has_uva)
+    if (all_have_uva)
     {
         printf("All GPUs can support UVA, enabling...\n");
     }
@@ -669,8 +667,17 @@ amrex::Finalize (bool finalize_parallel)
     for (int i = 0; i < nDevices_used; ++i) {
         checkCudaErrors(cudaSetDevice(i));
 #ifdef P2P
-        checkCudaErrors(cudaDeviceDisablePeerAccess(i));
+        for (int j = 0; j < nDevices_used; j++){
+            if (i == j)
+            {
+                continue;
+            }
+            checkCudaErrors(cudaDeviceDisablePeerAccess(j));
+        }
 #endif
+    }
+    for (int i = 0; i < nDevices_used; ++i) {
+        checkCudaErrors(cudaSetDevice(i));
         checkCudaErrors(cudaDeviceReset());
     }
 
