@@ -617,8 +617,8 @@ FabArrayBase::FB::FB (const FabArrayBase& fa, bool cross, const Periodicity& per
       m_SndVols(new CopyComTag::MapOfCopyComTagContainers),
       m_RcvVols(new CopyComTag::MapOfCopyComTagContainers),
 #ifdef CUDA
-      m_LocTagsDevice(0),
-      m_LocTagsDevice_d(0),
+      m_LocTagsDevice(new CopyComTagDevice::CopyComTagsDeviceContainer),
+      m_LocTagsDevice_d(new CopyComTagDevice::CopyComTagsDeviceContainer),
 #endif
       m_nuse(0)
 {
@@ -634,8 +634,8 @@ FabArrayBase::FB::FB (const FabArrayBase& fa, bool cross, const Periodicity& per
     }
 #ifdef CUDA
     int N_loc = (*m_LocTags).size();
-    m_LocTagsDevice = (CopyComTagDevice*) malloc(sizeof(CopyComTagDevice)*N_loc);
-    checkCudaErrors(cudaMalloc(&m_LocTagsDevice_d, sizeof(CopyComTagDevice)*N_loc));
+    *m_LocTagsDevice = (CopyComTagDevice*) malloc(sizeof(CopyComTagDevice)*N_loc);
+    checkCudaErrors(cudaMalloc(&(*m_LocTagsDevice_d), sizeof(CopyComTagDevice)*N_loc));
 #endif
 }
 
@@ -1036,8 +1036,10 @@ FabArrayBase::FB::~FB ()
     delete m_SndVols;
     delete m_RcvVols;
 #ifdef CUDA
+    delete *m_LocTagsDevice;
+    cudaFree(*m_LocTagsDevice_d);
     delete m_LocTagsDevice;
-    cudaFree(m_LocTagsDevice_d);
+    delete m_LocTagsDevice_d;
 #endif
 }
 

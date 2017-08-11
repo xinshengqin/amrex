@@ -192,7 +192,10 @@ public:
         Box sfab_box;
         Box dbox;
         Box sbox;
+
+        typedef CopyComTagDevice* CopyComTagsDeviceContainer;
     };
+    typedef CopyComTagDevice::CopyComTagsDeviceContainer CopyComTagsDeviceContainer;
 #endif
 
     // Key for unique combination of BoxArray and DistributionMapping
@@ -496,8 +499,8 @@ protected:
 	//
 	long bytes () const;
 #ifdef CUDA
-        CopyComTagDevice* m_LocTagsDevice;
-        CopyComTagDevice* m_LocTagsDevice_d;
+        CopyComTagsDeviceContainer* m_LocTagsDevice;
+        CopyComTagsDeviceContainer* m_LocTagsDevice_d;
 #endif
     private:
 	void define_fb (const FabArrayBase& fa);
