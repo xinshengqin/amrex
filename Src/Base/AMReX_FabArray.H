@@ -3108,8 +3108,41 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
             BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
             BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
             // don't transfer data back to CPU to fill ghost cells
-            // get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
-            get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+            // TODO: may want to sort tags in m_LocTags to avoid frequent switching of devices
+            int local_index_dst = localindex(tag.dstIndex);
+            // the dst fab is assigned on GPU deviceArray(local_index_dst)
+            checkCudaErrors(cudaSetDevice(deviceArray[local_index_dst]));
+
+            // // debug
+            // int local_index_src = localindex(tag.srcIndex);
+            // amrex::Print() << "+++++++++++++++++++++++++++++++++++++++" << std::endl;
+            // amrex::Print() << "In TheFB.m_LocTags: " << std::endl;
+            // amrex::Print() << "i: " << i << std::endl;
+            // // amrex::Print() << "dbox: " << std::endl;
+            // // amrex::Print() << tag.dbox << std::endl;
+            // // amrex::Print() << "sbox: " << std::endl;
+            // // amrex::Print() << tag.sbox << std::endl;
+            // // amrex::Print() << "dfab: " << std::endl;
+            // amrex::Print() << "    " << "globalIndex: " << tag.dstIndex << std::endl;
+            // amrex::Print() << "    " << "localIndex: " << local_index_dst << std::endl;
+            // amrex::Print() << "    " << "allocated on GPU: " << deviceArray[local_index_dst] << std::endl;
+            // // amrex::Print() << "    " << "pt_d: " << get(tag.dstIndex).devicePtr() << std::endl;
+            // // amrex::Print() << "    " << "smallEnd: " << get(tag.dstIndex).smallEnd() << std::endl;
+            // // amrex::Print() << "    " << "bigEnd: " << get(tag.dstIndex).bigEnd() << std::endl;
+            // amrex::Print() << "sfab: " << std::endl;
+            // amrex::Print() << "    " << "globalIndex: " << tag.srcIndex << std::endl;
+            // amrex::Print() << "    " << "localIndex: " << local_index_src << std::endl;
+            // amrex::Print() << "    " << "allocated on GPU: " << deviceArray[local_index_src] << std::endl;
+            // // amrex::Print() << "    " << "pt_d: " << get(tag.srcIndex).devicePtr() << std::endl;
+            // // amrex::Print() << "    " << "smallEnd: " << get(tag.srcIndex).smallEnd() << std::endl;
+            // // amrex::Print() << "    " << "bigEnd: " << get(tag.srcIndex).bigEnd() << std::endl;
+            // amrex::Print() << std::endl;
+            
+            get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+            getLastCudaError("CUDA kernel in BaseFab::copyd2d failed");
+            //
+            //
+            // get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
         }
         
         // synchronize all devices

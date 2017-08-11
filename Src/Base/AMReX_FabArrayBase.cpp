@@ -179,6 +179,8 @@ FabArrayBase::define (const BoxArray&            bxs,
     }
 #ifdef CUDA
     // compute distribution of fabs to different GPUs
+    // for now, the distribution strategy is just 
+    // asumming each fab has the same load
     deviceArray.assign(indexArray.size(),-1);
     int num_gpus = ParallelDescriptor::get_num_devices_used();
     BL_ASSERT(num_gpus >=1);

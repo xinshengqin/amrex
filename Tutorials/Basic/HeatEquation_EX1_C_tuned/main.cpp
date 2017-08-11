@@ -60,7 +60,7 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 #if (BL_SPACEDIM == 2)
 #ifdef CUDA
         // copy old solution from host to device
-        old_phi[mfi].toDevice(idx);
+        // old_phi[mfi].toDevice(idx);
         const int* lo = bx.loVect();
         const int* hi = bx.hiVect();
 
@@ -91,7 +91,7 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 #endif // CUDA_ARRAY
 
         // copy updated solution from device to host
-        new_phi[mfi].toHost(idx);
+        // new_phi[mfi].toHost(idx);
 #else
         const int* lo = bx.loVect();
         const int* hi = bx.hiVect();
@@ -244,7 +244,7 @@ void main_main ()
         flux[0][mfi].initialize_device();
         flux[1][mfi].initialize_device();
         // copy to device the 1st time
-        // (*phi_old)[mfi].toDevice();
+        (*phi_old)[mfi].toDevice();
     }
 #endif
 
