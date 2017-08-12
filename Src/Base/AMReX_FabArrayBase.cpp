@@ -616,10 +616,6 @@ FabArrayBase::FB::FB (const FabArrayBase& fa, bool cross, const Periodicity& per
       m_RcvTags(new CopyComTag::MapOfCopyComTagContainers),
       m_SndVols(new CopyComTag::MapOfCopyComTagContainers),
       m_RcvVols(new CopyComTag::MapOfCopyComTagContainers),
-#ifdef CUDA
-      m_LocTagsDevice(new CopyComTagDevice::CopyComTagsDeviceContainer),
-      m_LocTagsDevice_d(new CopyComTagDevice::CopyComTagsDeviceContainer),
-#endif
       m_nuse(0)
 {
     BL_PROFILE("FabArrayBase::FB::FB()");
@@ -633,9 +629,27 @@ FabArrayBase::FB::FB (const FabArrayBase& fa, bool cross, const Periodicity& per
 	}
     }
 #ifdef CUDA
+    int n_gpu_used = ParallelDescriptor::get_num_devices_used();
+    for (int i = 0; i < n_gpu_used; ++i) {
+        CopyComTagsDeviceContainer *cctdc = new CopyComTagsDeviceContainer;
+        CopyComTagsDeviceContainer *cctdc_d = new CopyComTagsDeviceContainer;
+        arrayOfLocTagsDevice.push_back(cctdc);
+        arrayOfLocTagsDevice_d.push_back(cctdc_d);
+    }
     int N_loc = (*m_LocTags).size();
-    *m_LocTagsDevice = (CopyComTagDevice*) malloc(sizeof(CopyComTagDevice)*N_loc);
-    checkCudaErrors(cudaMalloc(&(*m_LocTagsDevice_d), sizeof(CopyComTagDevice)*N_loc));
+    numLocTagsPerGPU = std::vector<int>(n_gpu_used,0);
+    for (int i = 0; i < N_loc; ++i) {
+        const CopyComTag& tag = (*m_LocTags)[i];
+        int on_gpu = fa.onDevice(fa.localindex(tag.dstIndex));
+        ++numLocTagsPerGPU[on_gpu];
+    }
+
+    // allocate memory for each GPU
+    for (int i = 0; i < n_gpu_used; ++i) {
+        *(arrayOfLocTagsDevice[i]) = (CopyComTagDevice*) malloc(sizeof(CopyComTagDevice)*numLocTagsPerGPU[i]);
+        checkCudaErrors(cudaSetDevice(i));
+        checkCudaErrors(cudaMalloc(&(*(arrayOfLocTagsDevice_d[i])), sizeof(CopyComTagDevice)*numLocTagsPerGPU[i]));
+    }
 #endif
 }
 
@@ -1036,10 +1050,15 @@ FabArrayBase::FB::~FB ()
     delete m_SndVols;
     delete m_RcvVols;
 #ifdef CUDA
-    delete *m_LocTagsDevice;
-    cudaFree(*m_LocTagsDevice_d);
-    delete m_LocTagsDevice;
-    delete m_LocTagsDevice_d;
+    int size = arrayOfLocTagsDevice.size();
+    for (int i = 0; i < size; ++i) {
+        delete *arrayOfLocTagsDevice[i];
+        delete arrayOfLocTagsDevice[i];
+
+        checkCudaErrors(cudaSetDevice(i));
+        cudaFree(*arrayOfLocTagsDevice_d[i]);
+        delete arrayOfLocTagsDevice_d[i];
+    }
 #endif
 }
 

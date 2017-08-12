@@ -3080,71 +3080,46 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
 
 #ifdef CUDA
         // We pack all info in m_LocTags and launch only one CUDA kernel to copy all boxes needed
-        // int n_gpu_used = ParallelDescriptor::get_num_devices_used();
-        long max_size = 0;
+        int n_gpu_used = ParallelDescriptor::get_num_devices_used();
+#ifndef P2P
+        if (n_gpu_used > 1) {
+            amrex::Abort("When multiple GPUs are used, P2P is should be enable!");
+        }
+#endif
+        std::vector<long> max_size(n_gpu_used,0);
+        std::vector<int> tag_count(n_gpu_used,0);
+        // scan all tags in m_LocTags and distribute them to LocTagsDevice of each GPU
 	for (int i=0; i<N_loc; ++i)
         {
             const CopyComTag& tag = (*TheFB.m_LocTags)[i];
             FAB& dfab = get(tag.dstIndex);
             FAB& sfab = get(tag.srcIndex);
-            (*TheFB.m_LocTagsDevice)[i] = CopyComTagDevice(dfab.devicePtr(), sfab.devicePtr(), dfab.box(), sfab.box(), tag.dbox, tag.sbox);
-            max_size = std::max(max_size, tag.dbox.numPts());
+            int on_gpu = deviceArray[localindex(tag.dstIndex)];
+            CopyComTagsDeviceContainer& cctdc = *((TheFB.arrayOfLocTagsDevice)[on_gpu]);
+            cctdc[tag_count[on_gpu]++] = 
+                CopyComTagDevice(dfab.devicePtr(), sfab.devicePtr(), dfab.box(), sfab.box(), tag.dbox, tag.sbox);
+            max_size[on_gpu] = std::max(max_size[on_gpu], tag.dbox.numPts());
         }
-        checkCudaErrors(cudaMemcpy(*TheFB.m_LocTagsDevice_d, *TheFB.m_LocTagsDevice, sizeof(CopyComTagDevice) * N_loc, cudaMemcpyHostToDevice));
-        dim3 blockSize(256,1,1);
-        dim3 gridSize( (max_size + blockSize.x - 1) / blockSize.x, 
-                       N_loc, 
-                       1 
-                     );
-        // TODO: can I get what data type (int, float etc.) is used for the the data in FAB?
-        // such that I can pass that to instantiate this template function
-        fill_bc_d2d<amrex::Real><<<gridSize, blockSize>>>(*TheFB.m_LocTagsDevice_d, N_loc, scomp, ncomp);
-        getLastCudaError("fill_bc_d2d kernel execution failed.\n");
 
 
-	// for (int i=0; i<N_loc; ++i)
-        // {
-        //     const CopyComTag& tag = (*TheFB.m_LocTags)[i];
-
-        //     BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
-        //     BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
-        //     // don't transfer data back to CPU to fill ghost cells
-        //     // TODO: may want to sort tags in m_LocTags to avoid frequent switching of devices
-        //     int local_index_dst = localindex(tag.dstIndex);
-        //     // the dst fab is assigned on GPU deviceArray(local_index_dst)
-        //     checkCudaErrors(cudaSetDevice(deviceArray[local_index_dst]));
-
-        //     // // debug
-        //     // int local_index_src = localindex(tag.srcIndex);
-        //     // amrex::Print() << "+++++++++++++++++++++++++++++++++++++++" << std::endl;
-        //     // amrex::Print() << "In TheFB.m_LocTags: " << std::endl;
-        //     // amrex::Print() << "i: " << i << std::endl;
-        //     // // amrex::Print() << "dbox: " << std::endl;
-        //     // // amrex::Print() << tag.dbox << std::endl;
-        //     // // amrex::Print() << "sbox: " << std::endl;
-        //     // // amrex::Print() << tag.sbox << std::endl;
-        //     // // amrex::Print() << "dfab: " << std::endl;
-        //     // amrex::Print() << "    " << "globalIndex: " << tag.dstIndex << std::endl;
-        //     // amrex::Print() << "    " << "localIndex: " << local_index_dst << std::endl;
-        //     // amrex::Print() << "    " << "allocated on GPU: " << deviceArray[local_index_dst] << std::endl;
-        //     // // amrex::Print() << "    " << "pt_d: " << get(tag.dstIndex).devicePtr() << std::endl;
-        //     // // amrex::Print() << "    " << "smallEnd: " << get(tag.dstIndex).smallEnd() << std::endl;
-        //     // // amrex::Print() << "    " << "bigEnd: " << get(tag.dstIndex).bigEnd() << std::endl;
-        //     // amrex::Print() << "sfab: " << std::endl;
-        //     // amrex::Print() << "    " << "globalIndex: " << tag.srcIndex << std::endl;
-        //     // amrex::Print() << "    " << "localIndex: " << local_index_src << std::endl;
-        //     // amrex::Print() << "    " << "allocated on GPU: " << deviceArray[local_index_src] << std::endl;
-        //     // // amrex::Print() << "    " << "pt_d: " << get(tag.srcIndex).devicePtr() << std::endl;
-        //     // // amrex::Print() << "    " << "smallEnd: " << get(tag.srcIndex).smallEnd() << std::endl;
-        //     // // amrex::Print() << "    " << "bigEnd: " << get(tag.srcIndex).bigEnd() << std::endl;
-        //     // amrex::Print() << std::endl;
-        //     
-        //     get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
-        //     getLastCudaError("CUDA kernel in BaseFab::copyd2d failed");
-        //     //
-        //     //
-        //     // get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
-        // }
+        // launch copy kernels on each GPU used
+        for (int i_gpu = 0; i_gpu<n_gpu_used; ++i_gpu ) {
+            checkCudaErrors(cudaSetDevice(i_gpu));
+            BL_ASSERT(tag_count[i_gpu] == TheFB.numLocTagsPerGPU[i_gpu]);
+            // arrayOfLocTagsDevice[i_gpu] has info of all tags whose dst fab is allocated on GPU i_gpu
+            CopyComTagsDeviceContainer& cctdc = *((TheFB.arrayOfLocTagsDevice)[i_gpu]);
+            CopyComTagsDeviceContainer& cctdc_d = *((TheFB.arrayOfLocTagsDevice_d)[i_gpu]);
+            checkCudaErrors(cudaMemcpy(cctdc_d, cctdc, sizeof(CopyComTagDevice)*tag_count[i_gpu], cudaMemcpyHostToDevice));
+            dim3 blockSize(256,1,1);
+            dim3 gridSize( (max_size[i_gpu] + blockSize.x - 1) / blockSize.x, 
+                           tag_count[i_gpu], 
+                           1 
+                         );
+            // TODO: can I get what data type (int, float etc.) is used for the the data in FAB?
+            // such that I can pass that to instantiate this template function
+            fill_bc_d2d<amrex::Real><<<gridSize, blockSize>>>(cctdc_d, N_loc, scomp, ncomp);
+            getLastCudaError("fill_bc_d2d kernel execution failed.\n");
+        }
         
         // synchronize all devices
         int n_dev = ParallelDescriptor::get_num_devices_used();

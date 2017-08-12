@@ -96,6 +96,13 @@ public:
             return -1;
         }
     }
+#ifdef CUDA
+    //! Given local index of the fab, return device ID on which this fab is assigned to
+    int onDevice (int K) const {
+        BL_ASSERT(K >= 0 && K < deviceArray.size());
+        return deviceArray[K];
+    }
+#endif
 
     //! Return constant reference to associated DistributionMapping.
     const DistributionMapping& DistributionMap () const { return distributionMap; }
@@ -499,8 +506,9 @@ protected:
 	//
 	long bytes () const;
 #ifdef CUDA
-        CopyComTagsDeviceContainer* m_LocTagsDevice;
-        CopyComTagsDeviceContainer* m_LocTagsDevice_d;
+        std::vector<CopyComTagsDeviceContainer*> arrayOfLocTagsDevice;
+        std::vector<CopyComTagsDeviceContainer*> arrayOfLocTagsDevice_d;
+        std::vector<int> numLocTagsPerGPU;
 #endif
     private:
 	void define_fb (const FabArrayBase& fa);

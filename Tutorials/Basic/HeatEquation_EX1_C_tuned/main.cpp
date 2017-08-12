@@ -18,6 +18,8 @@
 #include <AMReX_CUDA_helper.H>
 #endif
 
+#include <AMReX_Print.H>
+
 
 
 using namespace amrex;
@@ -120,19 +122,20 @@ void main_main ()
     Real strt_time = ParallelDescriptor::second();
 
     // BL_SPACEDIM: number of dimensions
-    int n_cell, max_grid_size, nsteps, plot_int, is_periodic[BL_SPACEDIM];
+    int nsteps, plot_int, is_periodic[BL_SPACEDIM];
+    Array<int> numcells;
+    Array<int> max_grid_size;
+
 
     // inputs parameters
     {
         // ParmParse is way of reading inputs from the inputs file
         ParmParse pp;
 
-        // We need to get n_cell from the inputs file - this is the number of cells on each side of 
-        //   a square (or cubic) domain.
-        pp.get("n_cell",n_cell);
+        pp.getarr("n_cell",numcells);
 
         // The domain is broken into boxes of size max_grid_size
-        pp.get("max_grid_size",max_grid_size);
+        pp.getarr("max_grid_size",max_grid_size);
 
         // Default plot_int to -1, allow us to set it to something else in the inputs file
         //  If plot_int < 0 then no plot files will be writtenq
@@ -149,13 +152,13 @@ void main_main ()
     Geometry geom;
     {
         IntVect dom_lo(AMREX_D_DECL(       0,        0,        0));
-        IntVect dom_hi(AMREX_D_DECL(n_cell-1, n_cell-1, n_cell-1));
+        IntVect dom_hi(AMREX_D_DECL(numcells[0]-1, numcells[1]-1, numcells[2]-1));
         Box domain(dom_lo, dom_hi);
 
         // Initialize the boxarray "ba" from the single box "bx"
         ba.define(domain);
         // Break up boxarray "ba" into chunks no larger than "max_grid_size" along a direction
-        ba.maxSize(max_grid_size);
+        ba.maxSize(IntVect(AMREX_D_DECL(max_grid_size[0],max_grid_size[1],max_grid_size[2])));
 
        // This defines the physical box, [-1,1] in each direction.
         RealBox real_box({AMREX_D_DECL(-1.0,-1.0,-1.0)},
