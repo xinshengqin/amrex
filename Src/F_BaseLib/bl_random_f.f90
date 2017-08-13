@@ -100,7 +100,7 @@ module bl_random_module
        use, intrinsic :: iso_c_binding
        implicit none
        type(c_ptr), value :: eng
-       character(c_char), intent(in) :: name(*)
+       character(kind=c_char), intent(in) :: name(*)
      end subroutine bl_rng_save_engine_c
 
      subroutine bl_rng_copy_engine_c(eng_dst, eng_src) bind(c)
@@ -114,7 +114,7 @@ module bl_random_module
        use, intrinsic :: iso_c_binding
        implicit none
        type(c_ptr) :: eng
-       character(c_char), intent(in) :: name(*)
+       character(kind=c_char), intent(in) :: name(*)
      end subroutine bl_rng_restore_engine_c
   end interface
 
@@ -144,14 +144,14 @@ module bl_random_module
        use, intrinsic :: iso_c_binding
        implicit none
        type(c_ptr), value :: rng
-       character(c_char), intent(in) :: name(*)
+       character(kind=c_char), intent(in) :: name(*)
      end subroutine bl_rng_save_uniform_real_c
 
      subroutine bl_rng_restore_uniform_real_c(rng, name) bind(c)
        use, intrinsic :: iso_c_binding
        implicit none
        type(c_ptr) :: rng
-       character(c_char), intent(in) :: name(*)
+       character(kind=c_char), intent(in) :: name(*)
      end subroutine bl_rng_restore_uniform_real_c
   end interface
 
@@ -181,14 +181,14 @@ module bl_random_module
        use, intrinsic :: iso_c_binding
        implicit none
        type(c_ptr), value :: rng
-       character(c_char), intent(in) :: name(*)
+       character(kind=c_char), intent(in) :: name(*)
      end subroutine bl_rng_save_normal_c
 
      subroutine bl_rng_restore_normal_c(rng, name) bind(c)
        use, intrinsic :: iso_c_binding
        implicit none
        type(c_ptr) :: rng
-       character(c_char), intent(in) :: name(*)
+       character(kind=c_char), intent(in) :: name(*)
      end subroutine bl_rng_restore_normal_c
   end interface
 
@@ -218,14 +218,14 @@ module bl_random_module
        use, intrinsic :: iso_c_binding
        implicit none
        type(c_ptr), value :: rng
-       character(c_char), intent(in) :: name(*)
+       character(kind=c_char), intent(in) :: name(*)
      end subroutine bl_rng_save_poisson_c
 
      subroutine bl_rng_restore_poisson_c(rng, name) bind(c)
        use, intrinsic :: iso_c_binding
        implicit none
        type(c_ptr) :: rng
-       character(c_char), intent(in) :: name(*)
+       character(kind=c_char), intent(in) :: name(*)
      end subroutine bl_rng_restore_poisson_c
   end interface
 
@@ -256,21 +256,21 @@ module bl_random_module
        use, intrinsic :: iso_c_binding
        implicit none
        type(c_ptr), value :: rng
-       character(c_char), intent(in) :: name(*)
+       character(kind=c_char), intent(in) :: name(*)
      end subroutine bl_rng_save_binomial_c
 
      subroutine bl_rng_restore_binomial_c(rng, name) bind(c)
        use, intrinsic :: iso_c_binding
        implicit none
        type(c_ptr) :: rng
-       character(c_char), intent(in) :: name(*)
+       character(kind=c_char), intent(in) :: name(*)
      end subroutine bl_rng_restore_binomial_c
   end interface
 
 contains
 
   subroutine bl_rng_filename(filename, dirname)
-    character(c_char), pointer, intent(inout) :: filename(:)
+    character(kind=c_char), pointer, intent(inout) :: filename(:)
     character(len=*), intent(in) :: dirname
     integer :: i, n
     character(len=16) :: procname
@@ -288,12 +288,17 @@ contains
   function bl_rng_init_seed(s) result(r)
     integer(c_int), intent(in) :: s
     integer :: r
+    integer, save :: rstatic
     if (s .eq. 0) then
-       r = bl_rng_random_uint_c()
-       call parallel_bcast(r)
+       !$omp master
+       rstatic = bl_rng_random_uint_c()
+       call parallel_bcast(rstatic)
        if (parallel_IOProcessor()) then
-          print*,'seed = 0 --> picking a random root seed',r
+          print*,'seed = 0 --> picking a random root seed',rstatic
        end if
+       !$omp end master
+       !$omp barrier
+       r = rstatic
     else if (s .gt. 0) then
        r = s
     else
@@ -321,7 +326,7 @@ contains
   subroutine bl_rng_save_engine(eng, dirname)
     type(bl_rng_engine), intent(in) :: eng
     character(len=*), intent(in) :: dirname
-    character(c_char), pointer :: filename(:)
+    character(kind=c_char), pointer :: filename(:)
     if (parallel_IOProcessor()) then
        call fabio_mkdir(dirname)
     end if
@@ -341,7 +346,7 @@ contains
   subroutine bl_rng_restore_engine(eng, dirname)
     type(bl_rng_engine), intent(inout) :: eng
     character(len=*), intent(in) :: dirname
-    character(c_char), pointer :: filename(:)
+    character(kind=c_char), pointer :: filename(:)
     if (c_associated(eng%p)) call bl_rng_destroy_engine(eng) 
     call bl_rng_filename(filename, dirname)
     call bl_rng_restore_engine_c(eng%p,filename)
@@ -373,7 +378,7 @@ contains
   subroutine bl_rng_save_uniform_real(rng, dirname)
     type(bl_rng_uniform_real), intent(in) :: rng
     character(len=*), intent(in) :: dirname
-    character(c_char), pointer :: filename(:)
+    character(kind=c_char), pointer :: filename(:)
     if (parallel_IOProcessor()) then
        call fabio_mkdir(dirname)
     end if
@@ -386,7 +391,7 @@ contains
   subroutine bl_rng_restore_uniform_real(rng, dirname)
     type(bl_rng_uniform_real), intent(inout) :: rng
     character(len=*), intent(in) :: dirname
-    character(c_char), pointer :: filename(:)
+    character(kind=c_char), pointer :: filename(:)
     if (c_associated(rng%p)) call bl_rng_destroy_distro(rng) 
     call bl_rng_filename(filename, dirname)
     call bl_rng_restore_uniform_real_c(rng%p,filename)
@@ -418,7 +423,7 @@ contains
   subroutine bl_rng_save_normal(rng, dirname)
     type(bl_rng_normal), intent(in) :: rng
     character(len=*), intent(in) :: dirname
-    character(c_char), pointer :: filename(:)
+    character(kind=c_char), pointer :: filename(:)
     if (parallel_IOProcessor()) then
        call fabio_mkdir(dirname)
     end if
@@ -431,7 +436,7 @@ contains
   subroutine bl_rng_restore_normal(rng, dirname)
     type(bl_rng_normal), intent(inout) :: rng
     character(len=*), intent(in) :: dirname
-    character(c_char), pointer :: filename(:)
+    character(kind=c_char), pointer :: filename(:)
     if (c_associated(rng%p)) call bl_rng_destroy_distro(rng) 
     call bl_rng_filename(filename, dirname)
     call bl_rng_restore_normal_c(rng%p,filename)
@@ -463,7 +468,7 @@ contains
   subroutine bl_rng_save_poisson(rng, dirname)
     type(bl_rng_poisson), intent(in) :: rng
     character(len=*), intent(in) :: dirname
-    character(c_char), pointer :: filename(:)
+    character(kind=c_char), pointer :: filename(:)
     if (parallel_IOProcessor()) then
        call fabio_mkdir(dirname)
     end if
@@ -476,7 +481,7 @@ contains
   subroutine bl_rng_restore_poisson(rng, dirname)
     type(bl_rng_poisson), intent(inout) :: rng
     character(len=*), intent(in) :: dirname
-    character(c_char), pointer :: filename(:)
+    character(kind=c_char), pointer :: filename(:)
     if (c_associated(rng%p)) call bl_rng_destroy_distro(rng) 
     call bl_rng_filename(filename, dirname)
     call bl_rng_restore_poisson_c(rng%p,filename)
@@ -509,7 +514,7 @@ contains
   subroutine bl_rng_save_binomial(rng, dirname)
     type(bl_rng_binomial), intent(in) :: rng
     character(len=*), intent(in) :: dirname
-    character(c_char), pointer :: filename(:)
+    character(kind=c_char), pointer :: filename(:)
     if (parallel_IOProcessor()) then
        call fabio_mkdir(dirname)
     end if
@@ -522,7 +527,7 @@ contains
   subroutine bl_rng_restore_binomial(rng, dirname)
     type(bl_rng_binomial), intent(inout) :: rng
     character(len=*), intent(in) :: dirname
-    character(c_char), pointer :: filename(:)
+    character(kind=c_char), pointer :: filename(:)
     if (c_associated(rng%p)) call bl_rng_destroy_distro(rng) 
     call bl_rng_filename(filename, dirname)
     call bl_rng_restore_binomial_c(rng%p,filename)

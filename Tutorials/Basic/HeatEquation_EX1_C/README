@@ -1,1 +1,0 @@
-The code assumes that you have set CUDA_PATH to your root cuda directory, e.g. /usr/local/cuda

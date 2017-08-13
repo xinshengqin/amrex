@@ -18,7 +18,7 @@ amrex::BArena::alloc (std::size_t _sz)
 #endif // CUDA_UM
 
 #else
-    pt = operator new(_sz);
+    pt = ::operator new(_sz);
 #endif
 
     return pt;
@@ -34,7 +34,7 @@ amrex::BArena::free (void* pt)
     cpu_free_pinned(pt);
 #endif // CUDA_UM
 #else
-    operator delete(pt);
+    ::operator delete(pt);
 #endif // CUDA
 }
 

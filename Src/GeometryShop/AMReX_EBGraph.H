@@ -359,11 +359,30 @@ namespace amrex
         std::vector<VolIndex> vofs = getVoFs(a_iv);
         return vofs.size();
       }
+    const IntVectSet& getAllIrregCells() const
+      {
+        return m_irregIVS;
+      }
+    const IntVectSet& getAllMultiCells() const
+      {
+        return m_multiIVS;
+      }
+    
+    Box getFullRegion() const
+      {
+        return m_fullRegion;
+      }
   private:
-        
+
+    ///for serialization
+    GraphNode getGraphNode(const IntVect& a_iv) const;
+
     ///box over which this graph is defined
     Box m_region;
-        
+
+    ///box NOT intersected  with domain
+    Box m_fullRegion;
+
     ///computational domain at this level of refinement
     Box m_domain;
         
@@ -390,10 +409,10 @@ namespace amrex
     bool m_isDomainSet;
         
     ///
-    IntVectSet* m_irregIVS;
+    IntVectSet m_irregIVS;
         
     ///
-    IntVectSet* m_multiIVS;
+    IntVectSet m_multiIVS;
         
         
     //mutable because it gets built when needed
@@ -472,6 +491,13 @@ namespace amrex
       {
         return m_implem->numVoFs(a_iv);
       }
+
+    ///
+    Box getFullRegion() const
+      {
+        return m_implem->getFullRegion();
+      }
+
     ///
     /**
        Return true if every cell in the EBGraph is a regular cell.
@@ -696,6 +722,14 @@ namespace amrex
       }
         
 
+    const IntVectSet& getAllIrregCells() const
+      {
+        return m_implem->getAllIrregCells();
+      }
+    const IntVectSet& getAllMultiCells() const
+      {
+        return m_implem->getAllMultiCells();
+      }
 
     ///this includes all meta data
     std::size_t nBytesFull() const
@@ -775,12 +809,15 @@ namespace amrex
         
     ///
     /**
-       This resizes the BaseFab to cover getRegion
+       This resizes the BaseFab to cover the input region
        1 = regular
        0 = irregular
        -1 = covered
+
+       2 outside the domain
     */
-    void fillIntMask(BaseFab<int>& a_mask) const;
+    void fillIntMask(BaseFab<int>& a_mask,
+                     const Box   & a_subbox) const;
         
         
     ///

@@ -59,13 +59,6 @@ extern "C" {
 }
 #endif
 
-#if defined(BL_USE_F_INTERFACES)
-extern "C" {
-    void amrex_parallel_comm_init_from_c (int fcomm);
-    void amrex_parallel_comm_free_from_c ();
-}
-#endif
-
 namespace amrex {
 namespace system
 {
@@ -274,7 +267,8 @@ amrex::ExecOnInitialize (PTR_TO_VOID_FUNC fp)
 }
 
 void
-amrex::Initialize (int& argc, char**& argv, bool build_parm_parse, MPI_Comm mpi_comm)
+amrex::Initialize (int& argc, char**& argv, bool build_parm_parse,
+                   MPI_Comm mpi_comm, const std::function<void()>& func_parm_parse)
 {
     ParallelDescriptor::StartParallel(&argc, &argv, mpi_comm);
 
@@ -320,11 +314,6 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse, MPI_Comm mpi_
 
     BL_PROFILE_INITIALIZE();
 
-    //
-    // Initialize random seed after we're running in parallel.
-    //
-    amrex::InitRandom(ParallelDescriptor::MyProc()+1, ParallelDescriptor::NProcs());
-
 #ifdef BL_USE_MPI
     amrex::Print() << "MPI initialized with "
 		   << ParallelDescriptor::NProcs()
@@ -361,6 +350,10 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse, MPI_Comm mpi_
                 ParmParse::Initialize(argc-2,argv+2,argv[1]);
             }
         }
+    }
+
+    if (func_parm_parse) {
+        func_parm_parse();
     }
 
     {
@@ -429,6 +422,10 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse, MPI_Comm mpi_
 
     amrex::Print() << "CUDA initialized.\n";
 #endif // CUDA
+    //
+    // Initialize random seed after we're running in parallel.
+    //
+    amrex::InitRandom(ParallelDescriptor::MyProc()+1, ParallelDescriptor::NProcs());
 
     ParallelDescriptor::StartTeams();
 
@@ -459,15 +456,6 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse, MPI_Comm mpi_
 #if defined(BL_USE_FORTRAN_MPI)
     int fcomm = MPI_Comm_c2f(ParallelDescriptor::Communicator());
     bl_fortran_mpi_comm_init (fcomm);
-#endif
-
-#if defined(BL_USE_F_INTERFACES)
-#if BL_USE_MPI
-    int fcomm2 = MPI_Comm_c2f(ParallelDescriptor::Communicator());
-#else
-    int fcomm2 = 0;
-#endif
-    amrex_parallel_comm_init_from_c(fcomm2);
 #endif
 
 #if defined(BL_MEM_PROFILING) && defined(BL_USE_F_BASELIB)
@@ -539,9 +527,6 @@ amrex::Finalize (bool finalize_parallel)
 #endif
 
     if (finalize_parallel) {
-#if defined(BL_USE_F_INTERFACES)
-	amrex_parallel_comm_free_from_c();
-#endif
 #if defined(BL_USE_FORTRAN_MPI)
 	bl_fortran_mpi_comm_free();
 #endif

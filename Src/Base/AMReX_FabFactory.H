@@ -55,7 +55,9 @@ public:
     virtual FAB* create (const Box& box, int ncomps, const FabInfo& info, int box_index) const override
     {
         FAB* fab = new FAB(box, ncomps, info.alloc, info.shared);
+#ifdef CUDA
 	if (info.device) fab->allocate_device(info.device_id);
+#endif
 	return fab;
     }
 };

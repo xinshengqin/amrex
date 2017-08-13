@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <random>
 #include <cassert>
 
@@ -16,6 +17,16 @@
 
 using namespace amrex;
 
+class NoOpPhysBC
+    : public amrex::PhysBCFunctBase
+{
+public:
+    NoOpPhysBC () {}
+    virtual ~NoOpPhysBC () {}
+    virtual void FillBoundary (amrex::MultiFab& mf, int, int, amrex::Real time) override { }
+    using amrex::PhysBCFunctBase::FillBoundary;
+};
+
 void WritePlotFile(const ScalarMeshData& rhs,
                    const ScalarMeshData& phi,
                    const VectorMeshData& E,
@@ -23,7 +34,7 @@ void WritePlotFile(const ScalarMeshData& rhs,
                    const Array<Geometry>& geom,
                    int nstep)
 {
-    int num_output_comp = 5;
+    int num_output_comp = 2 + BL_SPACEDIM;
     int num_levels = rhs.size();
     IntVect cc_flag = IntVect::TheZeroVector();
     Array<std::unique_ptr<MultiFab> > output_cc(num_levels);
@@ -33,9 +44,9 @@ void WritePlotFile(const ScalarMeshData& rhs,
                                           rhs[lev]->DistributionMap(), num_output_comp, 0));
         amrex::average_node_to_cellcenter(*output_cc[lev], 0, *rhs[lev],  0, 1);
         amrex::average_node_to_cellcenter(*output_cc[lev], 1, *phi[lev],  0, 1);
-        amrex::average_node_to_cellcenter(*output_cc[lev], 2, *E[lev][0], 0, 1);
-        amrex::average_node_to_cellcenter(*output_cc[lev], 3, *E[lev][1], 0, 1);
-        amrex::average_node_to_cellcenter(*output_cc[lev], 4, *E[lev][2], 0, 1);
+        for (int i = 0; i < BL_SPACEDIM; ++i) {
+            amrex::average_node_to_cellcenter(*output_cc[lev], 2+i, *E[lev][i], 0, 1);
+        }
     }
     
     Array<std::string> varnames;
@@ -43,16 +54,22 @@ void WritePlotFile(const ScalarMeshData& rhs,
     varnames.push_back("phi");
     varnames.push_back("Ex");
     varnames.push_back("Ey");
+#if BL_SPACEDIM == 3
     varnames.push_back("Ez");
+#endif
 
     Array<std::string> particle_varnames;
     particle_varnames.push_back("weight");
     particle_varnames.push_back("vx");
     particle_varnames.push_back("vy");
+#if BL_SPACEDIM == 3
     particle_varnames.push_back("vz");
+#endif
     particle_varnames.push_back("Ex");
     particle_varnames.push_back("Ey");
+#if BL_SPACEDIM == 3
     particle_varnames.push_back("Ez");
+#endif
     
     Array<int> level_steps;
     level_steps.push_back(0);
@@ -62,7 +79,7 @@ void WritePlotFile(const ScalarMeshData& rhs,
     
     Array<IntVect> outputRR(output_levs);
     for (int lev = 0; lev < output_levs; ++lev) {
-        outputRR[lev] = IntVect(2, 2, 2);
+        outputRR[lev] = IntVect(D_DECL(2, 2, 2));
     }
 
     const std::string& pltfile = amrex::Concatenate("plt", nstep, 5);    
@@ -92,31 +109,89 @@ void computeE(      VectorMeshData& E,
                             (*phi[lev] )[mfi].dataPtr(),
                             (*E[lev][0])[mfi].dataPtr(),
                             (*E[lev][1])[mfi].dataPtr(),
-                            (*E[lev][2])[mfi].dataPtr(), dx);
+#if BL_SPACEDIM == 3
+                            (*E[lev][2])[mfi].dataPtr(),
+#endif
+                            dx);
         }
 
         E[lev][0]->FillBoundary(gm.periodicity());
         E[lev][1]->FillBoundary(gm.periodicity());
-        E[lev][2]->FillBoundary(gm.periodicity());
+#if BL_SPACEDIM == 3
+        E[lev][2]->FillBoundary(gm.periodicity());                 
+#endif
+        //        VisMF::Write(*E[lev][0], amrex::MultiFabFileFullPrefix(lev, "tmp", "Level_", "Ex"));
+    }
+}
+        
+void zeroOutBoundary(MultiFab& input_data,
+                     MultiFab& bndry_data,
+                     const FabArray<BaseFab<int> >& mask) {
+    bndry_data.setVal(0.0, 1);
+    for (MFIter mfi(input_data); mfi.isValid(); ++mfi) {
+        const Box& bx = mfi.validbox();
+        zero_out_bndry(bx.loVect(), bx.hiVect(),
+                       input_data[mfi].dataPtr(),
+                       bndry_data[mfi].dataPtr(),
+                       mask[mfi].dataPtr());
+    }
+    bndry_data.FillBoundary();
+}
+
+void sumFineToCrseNodal(const MultiFab& fine, MultiFab& crse, 
+                        const Geometry& cgeom, const IntVect& ratio) {
+    
+    const BoxArray& fine_BA = fine.boxArray();
+    const DistributionMapping& fine_dm = fine.DistributionMap();
+    BoxArray coarsened_fine_BA = fine_BA;
+    coarsened_fine_BA.coarsen(ratio);
+    
+    MultiFab coarsened_fine_data(coarsened_fine_BA, fine_dm, 1, 0);
+    coarsened_fine_data.setVal(0.0);
+    
+    for (MFIter mfi(coarsened_fine_data); mfi.isValid(); ++mfi) {
+        const Box& bx = mfi.validbox();
+        const Box& crse_box = coarsened_fine_data[mfi].box();
+        const Box& fine_box = fine[mfi].box();
+        sum_fine_to_crse_nodal(bx.loVect(), bx.hiVect(), ratio.getVect(),
+                               coarsened_fine_data[mfi].dataPtr(), crse_box.loVect(), crse_box.hiVect(),
+                               fine[mfi].dataPtr(), fine_box.loVect(), fine_box.hiVect());
+    }
+    
+    crse.copy(coarsened_fine_data, cgeom.periodicity(), FabArrayBase::ADD);    
+}
+
+void fixRHSForSolve(Array<std::unique_ptr<MultiFab> >& rhs,
+                    const Array<std::unique_ptr<FabArray<BaseFab<int> > > >& masks,
+                    const Array<Geometry>& geom, const IntVect& ratio) {
+    int num_levels = rhs.size();
+    for (int lev = 0; lev < num_levels; ++lev) {
+        MultiFab& fine_rhs = *rhs[lev];
+        const FabArray<BaseFab<int> >& mask = *masks[lev];        
+        const BoxArray& fine_ba = fine_rhs.boxArray();
+        const DistributionMapping& fine_dm = fine_rhs.DistributionMap();
+        MultiFab fine_bndry_data(fine_ba, fine_dm, 1, 1);
+        zeroOutBoundary(fine_rhs, fine_bndry_data, mask);
     }
 }
 
 void computePhi(ScalarMeshData& rhs, ScalarMeshData& phi,
                 Array<BoxArray>& grids,
                 Array<DistributionMapping>& dm,
-                Array<Geometry>& geom) {
+                Array<Geometry>& geom,
+                Array<std::unique_ptr<FabArray<BaseFab<int> > > >& masks) {
 
     int num_levels = rhs.size();
+    int finest_level = num_levels - 1;
 
+    Array<std::unique_ptr<MultiFab> > tmp_rhs(num_levels);    
     for (int lev = 0; lev < num_levels; ++lev) {
-        phi[lev]->setVal(0.0);
+        tmp_rhs[lev].reset(new MultiFab(rhs[lev]->boxArray(), dm[lev], 1, 0));
+        MultiFab::Copy(*tmp_rhs[lev], *rhs[lev], 0, 0, 1, 0);
     }
     
-    PhysBCFunct cphysbc, fphysbc;
-    int lo_bc[] = {INT_DIR, INT_DIR, INT_DIR};   
-    int hi_bc[] = {INT_DIR, INT_DIR, INT_DIR};
-    Array<BCRec> bcs(1, BCRec(lo_bc, hi_bc));
-    NodeBilinear mapper;
+    IntVect ratio(D_DECL(2, 2, 2));
+    fixRHSForSolve(tmp_rhs, masks, geom, ratio);
 
     bool nodal = true;
     bool have_rhcc = false;
@@ -125,78 +200,94 @@ void computePhi(ScalarMeshData& rhs, ScalarMeshData& phi,
     int stencil = ND_CROSS_STENCIL;
     int verbose = 0;
     Array<int> mg_bc(2*BL_SPACEDIM, 1); // this means Dirichlet
-    Real rel_tol = 1.0e-9;
-    Real abs_tol = 1.0e-9;
+    Real rel_tol = 1.0e-14;
+    Real abs_tol = 1.0e-14;
 
-    MGT_Solver solver(geom, mg_bc.dataPtr(), grids, dm, nodal,
-                      stencil, have_rhcc, nc, Ncomp, verbose);
+    Array<Geometry>            level_geom(1);
+    Array<BoxArray>            level_grids(1);
+    Array<DistributionMapping> level_dm(1);
+    Array<MultiFab*>           level_phi(1);
+    Array<MultiFab*>           level_rhs(1);
     
-    solver.set_nodal_const_coefficients(1.0);
-    
-    solver.solve_nodal(amrex::GetArrOfPtrs(phi), amrex::GetArrOfPtrs(rhs), rel_tol, abs_tol);
-
     for (int lev = 0; lev < num_levels; ++lev) {
-        const auto& gm = geom[lev];
-        phi[lev]->FillBoundary(gm.periodicity());
-    }
+        level_phi[0]   = phi[lev].get();
+        level_rhs[0]   = tmp_rhs[lev].get();
+        level_geom[0]  = geom[lev];
+        level_grids[0] = grids[lev];
+        level_dm[0]    = dm[lev];
         
-    for (int lev = 0; lev < num_levels-1; ++lev) {
-        // info for coarse/fine interpolation
-        PhysBCFunct cphysbc, fphysbc;
-        int lo_bc[] = {INT_DIR, INT_DIR, INT_DIR};
-        int hi_bc[] = {INT_DIR, INT_DIR, INT_DIR};
-        Array<BCRec> bcs(1, BCRec(lo_bc, hi_bc));
-        NodeBilinear mapper;
+        MGT_Solver solver(level_geom, mg_bc.dataPtr(), level_grids, 
+                          level_dm, nodal,
+                          stencil, have_rhcc, nc, Ncomp, verbose);
+        
+        solver.set_nodal_const_coefficients(1.0);
+        
+        solver.solve_nodal(level_phi, level_rhs, rel_tol, abs_tol);
 
-        MultiFab tmp(phi[lev+1]->boxArray(), phi[lev+1]->DistributionMap(), 1, 1);
-                    Array<MultiFab*> crse(1);
-            crse[0] = phi[lev].get();
-            Array<Real> ctime(1, 0.0);
-            Array<Real> ftime(1, 0.0);            
-            Array<MultiFab*> fine(1);
-            fine[0] = phi[lev+1].get();
-            amrex::FillPatchTwoLevels(tmp, 0.0, crse, ctime, fine, ftime, 
-                                      0, 0, 1, 
-                                      geom[lev], geom[lev+1], cphysbc, fphysbc,
-                                      IntVect(2, 2, 2), &mapper, bcs);
-            MultiFab::Copy(*phi[lev+1], tmp, 0, 0, 1, 1);
+        if (lev < num_levels-1) {
+
+            NoOpPhysBC cphysbc, fphysbc;
+#if BL_SPACEDIM == 3
+            int lo_bc[] = {INT_DIR, INT_DIR, INT_DIR};
+            int hi_bc[] = {INT_DIR, INT_DIR, INT_DIR};
+#else
+            int lo_bc[] = {INT_DIR, INT_DIR};
+            int hi_bc[] = {INT_DIR, INT_DIR};
+#endif
+            Array<BCRec> bcs(1, BCRec(lo_bc, hi_bc));
+            NodeBilinear mapper;
+
+            amrex::InterpFromCoarseLevel(*phi[lev+1], 0.0, *phi[lev],
+                                         0, 0, 1, geom[lev], geom[lev+1],
+                                         cphysbc, fphysbc,
+                                         IntVect(D_DECL(2, 2, 2)), &mapper, bcs);            
+        }
+
+        //        VisMF::Write(*phi[lev], amrex::MultiFabFileFullPrefix(lev, "tmp", "Level_", "phi"));
+        //        VisMF::Write(*rhs[lev], amrex::MultiFabFileFullPrefix(lev, "tmp", "Level_", "rhs"));
     }
-
-    // Array<Geometry>            level_geom(1);
-    // Array<BoxArray>            level_grids(1);
-    // Array<DistributionMapping> level_dm(1);
-    // Array<MultiFab*>           level_phi(1);
-    // Array<MultiFab*>           level_rhs(1);
     
-    // for (int lev = 0; lev < num_levels; ++lev) {
-    //     level_phi[0]   = phi[lev].get();
-    //     level_rhs[0]   = rhs[lev].get();
-    //     level_geom[0]  = geom[lev];
-    //     level_grids[0] = grids[lev];
-    //     level_dm[0]    = dm[lev];
-        
-    //     MGT_Solver solver(level_geom, mg_bc.dataPtr(), level_grids, 
-    //                       level_dm, nodal,
-    //                       stencil, have_rhcc, nc, Ncomp, verbose);
-        
-    //     solver.set_nodal_const_coefficients(1.0);
-        
-    //     solver.solve_nodal(level_phi, level_rhs, rel_tol, abs_tol);
+    for (int lev = 0; lev < num_levels; ++lev) {
+        const Geometry& gm = geom[lev];
+        phi[lev]->FillBoundary(gm.periodicity());
+    }    
+}
 
-    //     if (lev < num_levels-1) {
-    //         amrex::InterpFromCoarseLevel(*phi[lev+1], 0.0, *phi[lev],
-    //                                      0, 0, 1, geom[lev], geom[lev+1],
-    //                                      cphysbc, fphysbc,
-    //                                      IntVect(2, 2, 2), &mapper, bcs);
-    //     }
-    // }
+void
+getLevelMasks(Array<std::unique_ptr<FabArray<BaseFab<int> > > >& masks,
+              const Array<BoxArray>& grids,
+              const Array<DistributionMapping>& dmap,
+              const Array<Geometry>& geom,
+              const int ncells = 1) {
+    int num_levels = grids.size();
+    BL_ASSERT(num_levels == dmap.size());
+
+    int covered = 0;
+    int notcovered = 1;
+    int physbnd = 1;
+    int interior = 0;
+    
+    for (int lev = 0; lev < num_levels; ++lev) {
+        BoxArray nba = grids[lev];
+        nba.surroundingNodes();
+        
+        FabArray<BaseFab<int> > tmp_mask(nba, dmap[lev], 1, ncells);
+        tmp_mask.BuildMask(geom[lev].Domain(), geom[lev].periodicity(),
+                           covered, notcovered, physbnd, interior);
+        masks[lev].reset(new FabArray<BaseFab<int> >(nba, dmap[lev], 1, 0));
+        for (MFIter mfi(tmp_mask); mfi.isValid(); ++mfi) {
+            const Box& bx = mfi.validbox();
+            build_mask(bx.loVect(), bx.hiVect(),
+                       tmp_mask[mfi].dataPtr(), (*masks[lev])[mfi].dataPtr(), &ncells);
+        }
+    }
 }
 
 int main(int argc, char* argv[])
 {
     amrex::Initialize(argc, argv);
 
-    int max_level, n_cell, max_grid_size, max_step, is_periodic[BL_SPACEDIM];
+    int max_level, n_cell, max_grid_size, n_buffer, max_step, is_periodic[BL_SPACEDIM];
     Real dt;
 
     // inputs parameters
@@ -204,6 +295,7 @@ int main(int argc, char* argv[])
         ParmParse pp;
         pp.get("max_level", max_level);
         pp.get("n_cell", n_cell);
+        pp.get("n_buffer", n_buffer);
         pp.get("max_grid_size", max_grid_size);       
         pp.get("max_step", max_step);
         pp.get("dt", dt);
@@ -223,12 +315,9 @@ int main(int argc, char* argv[])
         real_box.setHi(n, 20.0e-6);
     }
     
-    // This says we are using Cartesian coordinates
-    int coord = 0;
-    
     // This sets the boundary conditions to be doubly or triply periodic
     for (int i = 0; i < BL_SPACEDIM; i++) {
-        is_periodic[i] = 1;
+        is_periodic[i] = 0;
     }
 
     IntVect dom_lo(IntVect(D_DECL(0,0,0)));
@@ -237,10 +326,10 @@ int main(int argc, char* argv[])
    
     // make Geometry for each level
     Array<Geometry> geom(num_levels);
-    geom[0].define(domain,&real_box,coord,is_periodic);
+    geom[0].define(domain,&real_box,CoordSys::cartesian,is_periodic);
     for (int lev = 1; lev < num_levels; ++lev) {
 	geom[lev].define(amrex::refine(geom[lev-1].Domain(), rr[lev-1]),
-			 &real_box, coord, is_periodic);
+			 &real_box, CoordSys::cartesian, is_periodic);
     }
     
     // make grids for each level
@@ -248,8 +337,8 @@ int main(int argc, char* argv[])
     grids[0].define(domain);
     if (num_levels > 1) {
         int n_fine = n_cell*rr[0];
-        IntVect refined_lo(n_fine/4,n_fine/4,n_fine/4); 
-        IntVect refined_hi(3*n_fine/4-1,3*n_fine/4-1,3*n_fine/4-1);
+        IntVect refined_lo(D_DECL(3*n_fine/8,3*n_fine/8,3*n_fine/8)); 
+        IntVect refined_hi(D_DECL(5*n_fine/8-1,5*n_fine/8-1,5*n_fine/8-1));
 
         // Build a box for the level 1 domain
         Box refined_patch(refined_lo, refined_hi);
@@ -266,26 +355,30 @@ int main(int argc, char* argv[])
     Array<DistributionMapping> dm(num_levels);
     Array<std::unique_ptr<MultiFab> > phi(num_levels);
     Array<std::unique_ptr<MultiFab> > rhs(num_levels);
-    Array<std::array<std::unique_ptr<MultiFab>, 3> > eField(num_levels);
+    Array<std::array<std::unique_ptr<MultiFab>, BL_SPACEDIM> > eField(num_levels);
+
     for (int lev = 0; lev < num_levels; ++lev) {
         BoxArray nba = grids[lev];
         nba.surroundingNodes();
         dm[lev].define(grids[lev]);
 
-        rhs[lev].reset(new MultiFab(nba, dm[lev], Ncomp, Nghost));
-        phi[lev].reset(new MultiFab(nba, dm[lev], Ncomp, Nghost));
+        rhs[lev].reset(new MultiFab(nba, dm[lev], Ncomp, 1));
+        phi[lev].reset(new MultiFab(nba, dm[lev], Ncomp, 2));
         
-        eField[lev][0].reset(new MultiFab(nba, dm[lev], Ncomp, Nghost));
-        eField[lev][1].reset(new MultiFab(nba, dm[lev], Ncomp, Nghost));
-        eField[lev][2].reset(new MultiFab(nba, dm[lev], Ncomp, Nghost));
+        for (int idim = 0; idim < BL_SPACEDIM; ++idim) {
+            eField[lev][idim].reset(new MultiFab(nba, dm[lev], Ncomp, 1));
+            eField[lev][idim]->setVal(0.0);
+        }
 
         rhs[lev]->setVal(0.0);
-        phi[lev]->setVal(0.0);
-        
-        eField[lev][0]->setVal(0.0);
-        eField[lev][1]->setVal(0.0);
-        eField[lev][2]->setVal(0.0);
+        phi[lev]->setVal(0.0);        
     }
+
+    Array<std::unique_ptr<FabArray<BaseFab<int> > > > masks(num_levels); 
+    getLevelMasks(masks, grids, dm, geom);
+
+    Array<std::unique_ptr<FabArray<BaseFab<int> > > > gather_masks(num_levels);
+    getLevelMasks(gather_masks, grids, dm, geom, n_buffer + 1); // convert from num nodes to num cells
     
     ElectrostaticParticleContainer myPC(geom, dm, grids, rr);
 
@@ -295,15 +388,15 @@ int main(int argc, char* argv[])
 
         myPC.DepositCharge(rhs);
 
-        computePhi(rhs, phi, grids, dm, geom);
+        computePhi(rhs, phi, grids, dm, geom, masks);
         
         computeE(eField, phi, geom);
 
-        //        WritePlotFile(rhs, phi, eField, myPC, geom, step);
-
-        myPC.FieldGather(eField);
+        myPC.FieldGather(eField, gather_masks);
 
         myPC.writeParticles(step);
+
+        //        WritePlotFile(rhs, phi, eField, myPC, geom, step);
         
         myPC.Evolve(eField, rhs, dt);
 
