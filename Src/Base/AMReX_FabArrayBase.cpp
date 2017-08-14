@@ -1034,7 +1034,7 @@ FabArrayBase::FB::~FB ()
     delete m_SndVols;
     delete m_RcvVols;
 #ifdef CUDA
-    delete m_LocTagsDevice;
+    free(m_LocTagsDevice);
     cudaFree(m_LocTagsDevice_d);
 #endif
 }
