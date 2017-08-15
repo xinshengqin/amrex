@@ -3167,6 +3167,8 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
 	int N_loc = (*TheFB.m_LocTags).size();
 
 #ifdef CUDA
+
+#ifdef RESIDENT // don't need to copy data back to cpu to fill ghost cells
         // We pack all info in m_LocTags and launch only one CUDA kernel to copy all boxes needed
         long max_size = 0;
 	for (int i=0; i<N_loc; ++i)
@@ -3187,23 +3189,23 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
         // such that I can pass that to instantiate this template function
         fill_bc_d2d<amrex::Real><<<gridSize, blockSize>>>(TheFB.m_LocTagsDevice_d, N_loc, scomp, ncomp);
         getLastCudaError("fill_bc_d2d kernel execution failed.\n");
+#else // we already copy data back to cpu
+	for (int i=0; i<N_loc; ++i)
+        {
+            const CopyComTag& tag = (*TheFB.m_LocTags)[i];
 
-
-	// for (int i=0; i<N_loc; ++i)
-        // {
-        //     const CopyComTag& tag = (*TheFB.m_LocTags)[i];
-
-        //     BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
-        //     BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
-        //     // don't transfer data back to CPU to fill ghost cells
-        //     // get(tag.dstIndex).copyd2d(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
-        //     get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
-        // }
-        //
+            BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
+            BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
+            get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+        }
+        
+#endif
         // synchronize all devices
         int n_dev = ParallelDescriptor::get_num_devices_used();
         for (int i = 0; i < n_dev; ++i) {
-            checkCudaErrors(cudaSetDevice(i));
+            if (n_dev > 0) {
+                checkCudaErrors(cudaSetDevice(i));
+            }
             checkCudaErrors(cudaDeviceSynchronize());
         }
 #else // CUDA

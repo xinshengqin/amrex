@@ -171,6 +171,7 @@ public:
     static long bytesOfMapOfCopyComTagContainers (const MapOfCopyComTagContainers&);
 
 #ifdef CUDA
+#ifdef RESIDENT 
     // CopyComTag for d2d communication
     // This is analogous to CopyComTag but is has info specific for CUDA kernels
     struct CopyComTagDevice 
@@ -193,6 +194,7 @@ public:
         Box dbox;
         Box sbox;
     };
+#endif
 #endif
 
     // Key for unique combination of BoxArray and DistributionMapping
@@ -496,8 +498,10 @@ protected:
 	//
 	long bytes () const;
 #ifdef CUDA
+#ifdef RESIDENT 
         CopyComTagDevice* m_LocTagsDevice;
         CopyComTagDevice* m_LocTagsDevice_d;
+#endif
 #endif
     private:
 	void define_fb (const FabArrayBase& fa);

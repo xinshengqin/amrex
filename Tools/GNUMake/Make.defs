@@ -301,6 +301,9 @@ ifeq ($(USE_CUDA),TRUE)
     ifeq ($(USE_CUDA_ARRAY),TRUE)
         DEFINES += -DCUDA_ARRAY
     endif
+    ifeq ($(ALL_ON_DEVICE),TRUE)
+        DEFINES += -DRESIDENT
+    endif
     LIBRARIES += -lnvToolsExt -lcuda
     LIBRARY_LOCATIONS += $(CUDA_PATH)/lib64 
     INCLUDE_LOCATIONS += $(CUDA_PATH)/include

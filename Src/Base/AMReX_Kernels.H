@@ -9,7 +9,7 @@ namespace amrex {
     // void fill_bc_d2d(TagType<FAB>* tags, int n_tags, int scomp, int ncomp) {return;} 
     //
     // TODO: always assume 2D and ncomp is 1 for now
-    // class FabArrayBase;
+#if defined(CUDA) && defined(RESIDENT)
     template<typename T>
     __global__
     void fill_bc_d2d(FabArrayBase::CopyComTagDevice* tags, int n_tags, int scomp, int ncomp) {
@@ -54,6 +54,7 @@ namespace amrex {
                 ARRAY_2D(src,sfab_lox,sfab_loy,sfab_hix,sfab_hiy,x_global+offx,y_global+offy);  
         }
     }
+#endif
 
 }
 

@@ -60,7 +60,9 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 #if (BL_SPACEDIM == 2)
 #ifdef CUDA
         // copy old solution from host to device
-        // old_phi[mfi].toDevice(idx);
+#ifndef RESIDENT
+        old_phi[mfi].toDevice(idx);
+#endif
         const int* lo = bx.loVect();
         const int* hi = bx.hiVect();
 
@@ -104,7 +106,9 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 #endif // CUDA_ARRAY
 
         // copy updated solution from device to host
-        // new_phi[mfi].toHost(idx);
+#ifndef RESIDENT
+        new_phi[mfi].toHost(idx);
+#endif
 #else
         const int* lo = bx.loVect();
         const int* hi = bx.hiVect();
@@ -256,8 +260,10 @@ void main_main ()
         (*phi_new)[mfi].initialize_device();
         flux[0][mfi].initialize_device();
         flux[1][mfi].initialize_device();
+#ifdef RESIDENT
         // copy to device the 1st time
         (*phi_old)[mfi].toDevice();
+#endif
     }
 #endif
 
@@ -274,14 +280,13 @@ void main_main ()
         // Write a plotfile of the current data (plot_int was defined in the inputs file)
         if (plot_int > 0 && n%plot_int == 0)
         {
-#ifdef CUDA
+#if defined(CUDA) && defined(RESIDENT)
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
             for ( MFIter mfi(*phi_new,0,true); mfi.isValid(); ++mfi )
             {
                 const Box& bx = mfi.validbox();
-                // copy to host the 1st time
                 (*phi_new)[mfi].toHost();
             }
 
