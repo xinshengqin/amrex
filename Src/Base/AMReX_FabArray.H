@@ -126,9 +126,6 @@ struct MFInfo {
     MFInfo& SetDevice(bool d) { device = d; return *this; }
 };
 
-// template<typename T>
-// __global__
-// void fill_bc_d2d(FabArrayBase::CopyComTagDevice* tags, int n_tags, int scomp, int ncomp); 
 
 template <class FAB>
 class FabArray
