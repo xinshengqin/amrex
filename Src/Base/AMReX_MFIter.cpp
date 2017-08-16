@@ -243,8 +243,8 @@ MFIter::Initialize ()
 
 	currentIndex = beginIndex;
 #ifdef CUDA
-        int use_device = fabArray.deviceArray[currentIndex];
-        checkCudaErrors(cudaSetDevice(use_device));
+        int device_used = fabArray.deviceArray[currentIndex];
+        checkCudaErrors(cudaSetDevice(device_used));
 #endif
 
 	typ = fabArray.boxArray().ixType();
@@ -364,9 +364,9 @@ MFIter::operator++ () {
 #ifdef CUDA
     if (isValid()) {
         int pre_use_device = fabArray.deviceArray[currentIndex-1];
-        int use_device = fabArray.deviceArray[currentIndex];
-        if (pre_use_device != use_device)
-            checkCudaErrors(cudaSetDevice(use_device));
+        int device_used = fabArray.deviceArray[currentIndex];
+        if (pre_use_device != device_used)
+            checkCudaErrors(cudaSetDevice(device_used));
     }
 #endif
 

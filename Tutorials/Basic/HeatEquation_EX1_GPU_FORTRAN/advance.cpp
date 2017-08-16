@@ -29,7 +29,7 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
     // 
 
     // Compute fluxes one grid at a time
-    for ( MFIter mfi(old_phi); mfi.isValid(); ++mfi )
+    for ( MFIter mfi(old_phi,0,true); mfi.isValid(); ++mfi )
     {
         const Box& bx = mfi.validbox();
 #ifdef CUDA
@@ -64,7 +64,7 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
     }
     
     // Advance the solution one grid at a time
-    for ( MFIter mfi(old_phi); mfi.isValid(); ++mfi )
+    for ( MFIter mfi(old_phi,0,true); mfi.isValid(); ++mfi )
     {
         const Box& bx = mfi.validbox();
         
