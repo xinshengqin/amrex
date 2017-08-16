@@ -1411,6 +1411,7 @@ BaseFab<T>::allocate_device(int dev_id) {
 #else
     dptr_d = static_cast<T*>(amrex::The_Arena()->alloc_device(truesize*sizeof(T), dev_id));
 #endif
+    this->initialize_device();
 #endif
 
 }

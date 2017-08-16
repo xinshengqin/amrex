@@ -253,18 +253,13 @@ void main_main ()
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
+#ifdef RESIDENT
     for ( MFIter mfi(*phi_old,0,true); mfi.isValid(); ++mfi )
     {
-        const Box& bx = mfi.validbox();
-        (*phi_old)[mfi].initialize_device();
-        (*phi_new)[mfi].initialize_device();
-        flux[0][mfi].initialize_device();
-        flux[1][mfi].initialize_device();
-#ifdef RESIDENT
         // copy to device the 1st time
         (*phi_old)[mfi].toDevice();
-#endif
     }
+#endif
 #endif
 
     for (int n = 1; n <= nsteps; ++n)
