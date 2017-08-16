@@ -8,6 +8,7 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 	      std::array<MultiFab, AMREX_SPACEDIM>& flux,
 	      Real dt, const Geometry& geom)
 {
+    BL_PROFILE("advance");
     // Fill the ghost cells of each grid from the other grids
     // includes periodic domain boundaries
     old_phi.FillBoundary(geom.periodicity());
