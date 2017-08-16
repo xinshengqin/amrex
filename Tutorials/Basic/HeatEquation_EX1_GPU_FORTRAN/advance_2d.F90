@@ -55,7 +55,7 @@ subroutine compute_flux_kernel(lox, loy, hix, hiy, &
     fy, fylox, fyloy, fyhix, fyhiy, &
     dx, dy)
 
-  use amrex_fort_module, only : amrex_real
+  use amrex_fort_module, only : amrex_real, map_cuda_threads_to_space
   implicit none
   integer, value, intent(in) :: lox, loy, hix, hiy
   integer, value, intent(in) :: philox, philoy, phihix, phihiy
@@ -68,18 +68,26 @@ subroutine compute_flux_kernel(lox, loy, hix, hiy, &
 
   ! local variable
   integer :: idir
+  integer :: i,j
+  logical :: has_work
   ! x-fluxes
   idir = 1
-  call compute_flux_doit([lox,loy], [hix+1, hiy], &
+  call map_cuda_threads_to_space([lox,loy], [hix+1, hiy], i, j, has_work)
+  if (has_work) then
+      call compute_flux_gpu(i, j, &
       phi, [philox, philoy] , [phihix, phihiy] , & 
       fx, [fxlox, fxloy] , [fxhix, fxhiy] , & 
       [dx, dy] , idir)
+  endif
   ! y-fluxes
   idir = 2
-  call compute_flux_doit([lox,loy], [hix, hiy+1], &
+  call map_cuda_threads_to_space([lox,loy], [hix, hiy+1], i, j, has_work)
+  if (has_work) then
+  call compute_flux_gpu(i, j, &
       phi, [philox, philoy] , [phihix, phihiy] , & 
       fy, [fylox, fyloy] , [fyhix, fyhiy] , & 
       [dx, dy] , idir)
+  endif
 
 end subroutine compute_flux_kernel
 #endif
@@ -232,5 +240,33 @@ subroutine update_phi_doit (lo, hi, phiold, polo, pohi, phinew, pnlo, pnhi, &
      end do
   end do
 end subroutine update_phi_doit
+
+#ifdef CUDA
+  attributes(device) &
+subroutine compute_flux_gpu (i, j, phi, p_lo, p_hi, flx, f_lo, f_hi, dx, idir)
+
+  use amrex_fort_module, only: rt => amrex_real, get_loop_bounds
+
+  implicit none
+
+  integer,  intent(in   ) :: p_lo(2), p_hi(2), f_lo(2), f_hi(2)
+  real(rt), intent(in   ) :: phi(p_lo(1):p_hi(1),p_lo(2):p_hi(2))
+  real(rt), intent(inout) :: flx(f_lo(1):f_hi(1),f_lo(2):f_hi(2))
+  real(rt), intent(in   ) :: dx(2)
+  integer,  intent(in   ) :: idir
+  integer,  intent(in   ) :: i, j
+
+    if (idir .eq. 1) then
+       ! x-flux
+       flx(i,j) = ( phi(i,j) - phi(i-1,j) ) / dx(1)
+    else if (idir .eq. 2) then
+       ! y-flux
+       flx(i,j) = ( phi(i,j) - phi(i,j-1) ) / dx(2)
+    else
+       ! this should not happen
+       stop 1
+    endif
+end subroutine compute_flux_gpu
+#endif
 
 end module advance_2d

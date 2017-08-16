@@ -61,15 +61,8 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
                      dx);
 #endif // no CUDA
 
-    }
-    
-    // Advance the solution one grid at a time
-    for ( MFIter mfi(old_phi,0,true); mfi.isValid(); ++mfi )
-    {
-        const Box& bx = mfi.validbox();
         
 #ifdef CUDA
-        int idx = mfi.LocalIndex();
         update_phi(BL_TO_FORTRAN_BOX(bx),
                    BL_TO_FORTRAN_ANYD_DEVICE(old_phi[mfi]),
                    BL_TO_FORTRAN_ANYD_DEVICE(new_phi[mfi]),

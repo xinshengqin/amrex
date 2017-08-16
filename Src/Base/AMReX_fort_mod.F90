@@ -78,5 +78,41 @@ contains
 
   end subroutine get_loop_bounds
 
+#ifdef CUDA
+  attributes(device) &
+  subroutine map_cuda_threads_to_space(lo, hi, i, j, has_work)
+
+    implicit none
+
+    integer, intent(in)       :: lo(AMREX_SPACEDIM), hi(AMREX_SPACEDIM)
+    integer, intent(inout)       :: i, j
+#if (AMREX_SPACEDIM == 3) 
+    integer, intent(inout)       :: k
+#endif
+    logical, intent(inout)       :: has_work
+
+    ! Get our spatial index based on the CUDA thread index
+    i = lo(1) + (threadIdx%x - 1) + blockDim%x * (blockIdx%x - 1)
+    j = lo(2) + (threadIdx%y - 1) + blockDim%y * (blockIdx%y - 1)
+#if (AMREX_SPACEDIM == 3) 
+    k = lo(3) + (threadIdx%z - 1) + blockDim%z * (blockIdx%z - 1)
+#endif
+
+    ! If we have more threads than zones, set hi < lo so that the
+    ! loop iteration gets skipped.
+
+    if (i .gt. hi(1) &
+        .or. j .gt. hi(2) &
+#if (AMREX_SPACEDIM == 3) 
+        .or. k .gt. hi(3) &
+#endif
+        ) then
+        has_work = .false.
+    else
+        has_work = .true.
+    endif
+
+  end subroutine map_cuda_threads_to_space
+#endif
 
 end module amrex_fort_module
