@@ -1,6 +1,6 @@
 module cuda_module
 
-    use cudafor, only: cuda_stream_kind, cudaEvent
+    use cudafor, only: cuda_stream_kind, cudaEvent, dim3
     use amrex_fort_module, only: amrex_real
 
     implicit none
@@ -23,6 +23,9 @@ module cuda_module
     type(cudaEvent) :: event_start(max_cuda_timer)
     type(cudaEvent) :: event_stop(max_cuda_timer)
     integer :: n_timer
+
+    ! current number of cuda threads and cuda blocks
+    type(dim3) :: numBlocks, numThreads
 
 contains
 
@@ -79,21 +82,21 @@ contains
 
 
 
-#ifdef BL_SPACEDIM
+#ifdef AMREX_SPACEDIM
   subroutine threads_and_blocks(lo, hi, numBlocks, numThreads)
 
     use cudafor, only: dim3
 
     implicit none
 
-    integer, intent(in)       :: lo(BL_SPACEDIM), hi(BL_SPACEDIM)
+    integer, intent(in)       :: lo(AMREX_SPACEDIM), hi(AMREX_SPACEDIM)
     type(dim3), intent(inout) :: numBlocks, numThreads
 
-    integer :: tile_size(BL_SPACEDIM)
+    integer :: tile_size(AMREX_SPACEDIM)
 
     tile_size = hi - lo + 1
 
-    if (BL_SPACEDIM .eq. 1) then
+    if (AMREX_SPACEDIM .eq. 1) then
 
        numThreads % x = 256
        numThreads % y = 1
@@ -103,7 +106,7 @@ contains
        numBlocks % y = 1
        numBlocks % z = 1
 
-    else if (BL_SPACEDIM .eq. 2) then
+    else if (AMREX_SPACEDIM .eq. 2) then
 
        numThreads % x = 16
        numThreads % y = 16

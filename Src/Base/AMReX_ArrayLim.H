@@ -51,7 +51,17 @@
 /* For CUDA */
 #ifdef CUDA
 #define BL_TO_FORTRAN_N_3D_DEVICE(x,n) (x).devicePtr(n), ARLIM_3D((x).loVect()), ARLIM_3D((x).hiVect())
+#define BL_TO_FORTRAN_ANYD_DEVICE(x) (x).devicePtr(), ARLIM_ANYD((x).loVect()), ARLIM_ANYD((x).hiVect())
+
+#if     BL_SPACEDIM==1
+#define BL_TO_CUDA_KERNEL(x) (x).devicePtr(), (x).loVect()[0], (x).hiVect()[0]
+#elif   BL_SPACEDIM==2
+#define BL_TO_CUDA_KERNEL(x) (x).devicePtr(), (x).loVect()[0], (x).loVect()[1], (x).hiVect()[0], (x).hiVect()[1] 
+#elif   BL_SPACEDIM==3
+#define BL_TO_CUDA_KERNEL(x) (x).devicePtr(), (x).loVect()[0], (x).loVect()[1], (x).loVect()[2],(x).hiVect()[0], (x).hiVect()[1], (x).hiVect()[1]
 #endif
+
+#endif// CUDA
 
 #else
 

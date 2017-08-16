@@ -30,10 +30,10 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
     // Compute fluxes one grid at a time
     for ( MFIter mfi(old_phi); mfi.isValid(); ++mfi )
     {
-        int idx = mfi.LocalIndex();
         const Box& bx = mfi.validbox();
 #ifdef CUDA
 #ifndef RESIDENT
+        int idx = mfi.LocalIndex();
         // copy old solution from host to device
         old_phi[mfi].toDevice(idx);
 #endif
@@ -59,14 +59,27 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
 #endif
                      dx);
 #endif // no CUDA
+
     }
     
     // Advance the solution one grid at a time
     for ( MFIter mfi(old_phi); mfi.isValid(); ++mfi )
     {
-        int idx = mfi.LocalIndex();
         const Box& bx = mfi.validbox();
         
+#ifdef CUDA
+        int idx = mfi.LocalIndex();
+        update_phi(BL_TO_FORTRAN_BOX(bx),
+                   BL_TO_FORTRAN_ANYD_DEVICE(old_phi[mfi]),
+                   BL_TO_FORTRAN_ANYD_DEVICE(new_phi[mfi]),
+                   BL_TO_FORTRAN_ANYD_DEVICE(flux[0][mfi]),
+                   BL_TO_FORTRAN_ANYD_DEVICE(flux[1][mfi]),
+#if (AMREX_SPACEDIM == 3)   
+                   BL_TO_FORTRAN_ANYD_DEVICE(flux[2][mfi]),
+#endif
+                   dx , dt, idx, old_phi[mfi].deviceID());
+
+#else
         update_phi(BL_TO_FORTRAN_BOX(bx),
                    BL_TO_FORTRAN_ANYD(old_phi[mfi]),
                    BL_TO_FORTRAN_ANYD(new_phi[mfi]),
@@ -76,5 +89,13 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
                    BL_TO_FORTRAN_ANYD(flux[2][mfi]),
 #endif
                    dx, dt);
+#endif
+
+#ifdef CUDA
+#ifndef RESIDENT
+        // copy old solution from host to device
+        new_phi[mfi].toHost(idx);
+#endif
+#endif
     }
 }
