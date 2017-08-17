@@ -16,7 +16,9 @@ contains
                              flxy, fy_lo, fy_hi, &
                              phix_1d, phiy_1d, phix, phiy, slope, glo, ghi)
 
-    use slope_module, only: slopex, slopey
+    use slope_module, only: slopey
+    use slope_module_cuda, only: slopex
+    ! use slope_module, only: slopex
 
     integer, intent(in) :: lo(2), hi(2), glo(2), ghi(2)
     double precision, intent(in) :: dt, dx(2)
@@ -38,9 +40,12 @@ contains
 
     hdtdx = 0.5*(dt/dx)
 
+    ! call slopex(glo, ghi, &
+    !             phi, ph_lo, ph_hi, &
+    !             slope, glo, ghi)
     call slopex(glo, ghi, &
                 phi, ph_lo, ph_hi, &
-                slope, glo, ghi)
+                slope, glo, ghi,0,0)
 
     ! compute phi on x faces using umac to upwind; ignore transverse terms
     do    j = lo(2)-1, hi(2)+1
