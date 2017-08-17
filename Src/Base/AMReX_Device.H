@@ -28,6 +28,9 @@ extern "C" {
     void get_cuda_num_calls(int* id, int* ncalls);
     void get_stream(const int* id, cudaStream_t* pStream, const int* device_id); 
 
+    void getNumDeviceUsed(int* ndev);
+
+
 #ifdef CUDA_ARRAY
     void gpu_malloc_2d(void** p, std::size_t* _pitch, const std::size_t* _isize, const std::size_t* _jsize, const int* device_id);
     void gpu_htod_memcpy_2d_async(void* p_d, const std::size_t* pitch_d, void* p_h, const std::size_t* pitch_h, const std::size_t* isize, const std::size_t* jsize, int* idx, const int* device_id);

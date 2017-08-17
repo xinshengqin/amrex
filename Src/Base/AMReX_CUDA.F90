@@ -27,6 +27,14 @@ module cuda_module
     ! current number of cuda threads and cuda blocks
     type(dim3) :: numBlocks, numThreads
 
+
+    interface
+        subroutine getNumDeviceUsed(ndev) bind(C,name='getNumDeviceUsed')
+            use iso_c_binding
+            integer(c_int) :: ndev
+        end subroutine
+    end interface
+
 contains
 
   subroutine initialize_cuda() bind(c, name='initialize_cuda')
@@ -35,9 +43,9 @@ contains
     
     implicit none
 
-    integer :: i, p, cudaResult
+    integer :: i, p, num_devices, cudaResult
 
-    cudaResult = cudaGetDeviceCount(num_devices)
+    call getNumDeviceUsed(num_devices)
     do p = 0, num_devices-1
         cudaResult = cudaSetDevice(p)
         do i = 1, max_cuda_streams
