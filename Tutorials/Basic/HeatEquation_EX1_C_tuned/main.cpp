@@ -77,18 +77,32 @@ void advance (MultiFab& old_phi, MultiFab& new_phi,
                 new_phi[mfi].hiVect()[0], new_phi[mfi].hiVect()[1],
                 dx[0], dx[1], dt, idx, old_phi[mfi].getPitch());
 #else
-        advance_c(lo[0],lo[1],hi[0],hi[1],
-        // advance_c_shared(lo[0],lo[1],hi[0],hi[1],
-        // advance_c_2x2(lo[0],lo[1],hi[0],hi[1],
-        // advance_c_shared_2x2(lo[0],lo[1],hi[0],hi[1],
-                old_phi[mfi].devicePtr(), 
-                old_phi[mfi].loVect()[0], old_phi[mfi].loVect()[1],
-                old_phi[mfi].hiVect()[0], old_phi[mfi].hiVect()[1],
-                new_phi[mfi].devicePtr(), 
-                new_phi[mfi].loVect()[0], new_phi[mfi].loVect()[1],
-                new_phi[mfi].hiVect()[0], new_phi[mfi].hiVect()[1],
-                dx[0], dx[1], dt, idx, 
-                old_phi[mfi].deviceID());
+        bool test_dma = true;
+        if (!test_dma) {
+            advance_c(lo[0],lo[1],hi[0],hi[1],
+            // advance_c_shared(lo[0],lo[1],hi[0],hi[1],
+            // advance_c_2x2(lo[0],lo[1],hi[0],hi[1],
+            // advance_c_shared_2x2(lo[0],lo[1],hi[0],hi[1],
+                    old_phi[mfi].devicePtr(), 
+                    old_phi[mfi].loVect()[0], old_phi[mfi].loVect()[1],
+                    old_phi[mfi].hiVect()[0], old_phi[mfi].hiVect()[1],
+                    new_phi[mfi].devicePtr(), 
+                    new_phi[mfi].loVect()[0], new_phi[mfi].loVect()[1],
+                    new_phi[mfi].hiVect()[0], new_phi[mfi].hiVect()[1],
+                    dx[0], dx[1], dt, idx, 
+                    old_phi[mfi].deviceID());
+        }
+        else {
+            advance_c(lo, hi,
+                      old_phi[mfi].devicePtr(), 
+                      old_phi[mfi].loVect(),
+                      old_phi[mfi].hiVect(),
+                      new_phi[mfi].devicePtr(), 
+                      new_phi[mfi].loVect(),
+                      new_phi[mfi].hiVect(),
+                      dx, dt, idx, 
+                      old_phi[mfi].deviceID());
+        }
 
         // SimpleFAB* old_phi_fab_pt = new SimpleFAB(old_phi[mfi]);
         // SimpleFAB* new_phi_fab_pt = new SimpleFAB(new_phi[mfi]);

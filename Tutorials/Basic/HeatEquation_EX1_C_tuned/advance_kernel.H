@@ -39,6 +39,15 @@ void advance_doit_gpu(
         const int phi_new_lox, const int phi_new_loy, const int phi_new_hix, const int phi_new_hiy,
         const amrex::Real dx, const amrex::Real dy, const amrex::Real dt); 
 
+__global__
+void advance_doit_gpu(
+        const int* lo, const int* hi,  
+        const __restrict__ amrex::Real* phi_old,
+        const int* phi_old_lo, const int* phi_old_hi,  
+        __restrict__ amrex::Real* phi_new,
+        const int* phi_new_lo, const int* phi_new_hi,  
+        const amrex::Real* dx, const amrex::Real dt);
+
 
 __global__
 void advance_doit_gpu_2x2(
@@ -95,6 +104,13 @@ void advance_c(const int& lox, const int& loy, const int& hix, const int& hiy,
                 amrex::Real* phi_new,
                 const int& phi_new_lox, const int& phi_new_loy, const int& phi_new_hix, const int& phi_new_hiy,
                 const amrex::Real& dx, const amrex::Real& dy, const amrex::Real& dt, const int& idx, const int& device_id = 0);
+
+void advance_c(const int* lo_, const int* hi_,
+                const amrex::Real* phi_old,
+                const int* phi_old_lo_, const int* phi_old_hi_, 
+                amrex::Real* phi_new,
+                const int* phi_new_lo_, const int* phi_new_hi_, 
+                const amrex::Real* dx_, const amrex::Real& dt, const int& idx, const int& device_id = 0);
 
 void advance_c_2x2(const int& lox, const int& loy, const int& hix, const int& hiy,
                 const amrex::Real* phi_old,

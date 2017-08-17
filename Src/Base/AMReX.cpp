@@ -405,6 +405,7 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse,
     cuCtxGetCurrent( &ctx );
     nvtxNameCuContextA( ctx, name.c_str() );
 #else
+    checkCudaErrors(cudaSetDeviceFlags(cudaDeviceMapHost));
     // use device 0 by default
     checkCudaErrors(cudaSetDevice(0));
     amrex::Print() << "Set default device to 0" << std::endl;

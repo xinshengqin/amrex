@@ -115,6 +115,36 @@ void advance_doit_gpu(
         dt/(dy*dy) * (phi_old[index_yhi] - 2*phi_old[index_x] + phi_old[index_ylo]); 
 }
 
+__global__
+__launch_bounds__(KERNEL_MAX_THREADS, KERNEL_MIN_BLOCKS)
+void advance_doit_gpu(
+        const int* lo, const int* hi,  
+        const __restrict__ amrex::Real* phi_old,
+        const int* phi_old_lo, const int* phi_old_hi,  
+        __restrict__ amrex::Real* phi_new,
+        const int* phi_new_lo, const int* phi_new_hi,  
+        const amrex::Real* dx, const amrex::Real dt)
+{
+    // map cuda thread (cudai, cudaj) to cell (i,j) it works on 
+    int cudai = threadIdx.x + blockDim.x * blockIdx.x;
+    int cudaj = threadIdx.y + blockDim.y * blockIdx.y;
+    int i = cudai + lo[0];
+    int j = cudaj + lo[1];
+    // here we assume phi_old and phi_new have the same size
+    int phi_i = i - phi_old_lo[0];
+    int phi_j = j - phi_old_lo[1];
+    int xsize = phi_old_hi[0] - phi_old_lo[0] + 1;
+    int index_x = phi_j*xsize + phi_i;
+    int index_ylo = (phi_j-1)*xsize + phi_i;
+    int index_yhi = (phi_j+1)*xsize + phi_i;
+// #define ARRAY_2D(PHI, LO_X, LO_Y, HI_X, HI_Y, I, J) PHI[(J-LO_Y)*(HI_X-LO_X+1)+I-LO_X]
+
+    if ( i > hi[0] || j > hi[1] ) return;
+    phi_new[index_x] = phi_old[index_x] +
+        dt/(dx[0]*dx[0]) * (phi_old[index_x+1] - 2*phi_old[index_x] + phi_old[index_x-1]) + 
+        dt/(dx[1]*dx[1]) * (phi_old[index_yhi] - 2*phi_old[index_x] + phi_old[index_ylo]); 
+}
+
 #ifdef CUDA_ARRAY
 __global__
 void advance_doit_gpu_align(
@@ -364,6 +394,52 @@ void advance_c(const int& lox, const int& loy, const int& hix, const int& hiy,
 #elif (BL_SPACEDIM == 3)
     // TODO
 #endif
+}
+
+void advance_c(const int* lo_, const int* hi_,
+                const amrex::Real* phi_old,
+                const int* phi_old_lo_, const int* phi_old_hi_,
+                amrex::Real* phi_new,
+                const int* phi_new_lo_, const int* phi_new_hi_, 
+                const amrex::Real* dx_, const amrex::Real& dt, const int& idx, const int& device_id)
+{
+    int* lo = 0;
+    int* hi = 0;
+    int* phi_old_lo = 0;
+    int* phi_old_hi = 0;
+    int* phi_new_lo = 0;
+    int* phi_new_hi = 0;
+    amrex::Real* dx = 0;
+    int nBytes = 2*sizeof(int);
+    cudaHostAlloc(&lo, nBytes, cudaHostAllocMapped);
+    cudaHostAlloc(&hi, nBytes, cudaHostAllocMapped);
+    cudaHostAlloc(&phi_old_lo, nBytes, cudaHostAllocMapped);
+    cudaHostAlloc(&phi_old_hi, nBytes, cudaHostAllocMapped);
+    cudaHostAlloc(&phi_new_lo, nBytes, cudaHostAllocMapped);
+    cudaHostAlloc(&phi_new_hi, nBytes, cudaHostAllocMapped);
+    cudaHostAlloc(&dx, 2*sizeof(amrex::Real), cudaHostAllocMapped);
+    std::memcpy(lo, lo_, nBytes);
+    std::memcpy(hi, hi_, nBytes);
+    std::memcpy(phi_old_lo, phi_old_lo_, nBytes);
+    std::memcpy(phi_old_hi, phi_old_hi_, nBytes);
+    std::memcpy(phi_new_lo, phi_new_lo_, nBytes);
+    std::memcpy(phi_new_hi, phi_new_hi_, nBytes);
+    std::memcpy(dx, dx_, 2*sizeof(amrex::Real));
+
+    dim3 blockSize(BLOCKSIZE_2D,BLOCKSIZE_2D,1);
+    dim3 gridSize( (hi_[0]-lo_[0]+1 + blockSize.x - 1) / blockSize.x, 
+                   (hi_[1]-lo_[1]+1 + blockSize.y - 1) / blockSize.y, 
+                    1 
+                 );
+    cudaStream_t pStream;
+    get_stream(&idx, &pStream, &device_id);
+    advance_doit_gpu<<<gridSize, blockSize, 0, pStream>>>(
+            lo, hi,
+            phi_old,
+            phi_old_lo, phi_old_hi,
+            phi_new,
+            phi_new_lo, phi_new_hi,
+            dx, dt);
 }
 
 void advance_c_2x2(const int& lox, const int& loy, const int& hix, const int& hiy,
