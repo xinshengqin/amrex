@@ -20,15 +20,15 @@ contains
 #endif
                              )
 
-    use slope_module, only: slopey
 #ifdef CUDA
     use cudafor, only: cudaMemcpyAsync, cudaMemcpyHostToDevice, & 
         cudaMemcpyDeviceToHost, cudaDeviceSynchronize, cudaMemcpy
     use cuda_module, only: threads_and_blocks, stream_from_index
     use cuda_module, only: numThreads, numBlocks, cuda_streams 
-    use slope_module_cuda, only: slopex
+    ! use slope_module_cuda, only: slopex
+    use slope_module_cuda, only: slopex_cuf, slopey_cuf
 #else
-    use slope_module, only: slopex
+    use slope_module, only: slopex, slopey
 #endif
 
     integer, intent(in) :: lo(2), hi(2), glo(2), ghi(2)
@@ -74,7 +74,8 @@ contains
 
     hdtdx = 0.5*(dt/dx)
 
-    call slopex(glo, ghi, &
+    ! call slopex(glo, ghi, &
+    call slopex_cuf(glo, ghi, &
                 phi_d, ph_lo, ph_hi, &
                 slope_d, glo, ghi &
 #ifdef CUDA
@@ -98,19 +99,22 @@ contains
     end do
 
 #ifdef CUDA
-    cudaResult = cudaMemcpyAsync(slope, slope_d, slope_size, cudaMemcpyDeviceToHost, cuda_streams(stream_from_index(idx),device_id))
-    cudaResult = cudaMemcpyAsync(phix_1d, phix_1d_d, phix_1d_size, cudaMemcpyDeviceToHost, cuda_streams(stream_from_index(idx),device_id))
-    cudaResult = cudaDeviceSynchronize()
+    ! cudaResult = cudaMemcpyAsync(slope, slope_d, slope_size, cudaMemcpyDeviceToHost, cuda_streams(stream_from_index(idx),device_id))
+    ! cudaResult = cudaMemcpyAsync(phix_1d, phix_1d_d, phix_1d_size, cudaMemcpyDeviceToHost, cuda_streams(stream_from_index(idx),device_id))
+    ! cudaResult = cudaDeviceSynchronize()
 
-    deallocate(phix_1d_d)
-    deallocate(slope_d)
-    deallocate(phi_d)
-    deallocate(umac_d)
+    ! deallocate(phix_1d_d)
+    ! deallocate(slope_d)
+    ! deallocate(phi_d)
+    ! deallocate(umac_d)
 #endif
 
-    call slopey(glo, ghi, &
-                phi, ph_lo, ph_hi, &
-                slope, glo, ghi)
+    call slopey_cuf(glo, ghi, &
+                phi_d, ph_lo, ph_hi, &
+                slope_d, glo, ghi, idx, device_id)
+
+    cudaResult = cudaMemcpyAsync(slope, slope_d, slope_size, cudaMemcpyDeviceToHost, cuda_streams(stream_from_index(idx),device_id))
+    cudaResult = cudaMemcpyAsync(phix_1d, phix_1d_d, phix_1d_size, cudaMemcpyDeviceToHost, cuda_streams(stream_from_index(idx),device_id))
 
     ! compute phi on y faces using umac to upwind; ignore transverse terms
     do    j = lo(2)  , hi(2)+1
@@ -160,6 +164,10 @@ contains
 
        end do
     end do
+    deallocate(phix_1d_d)
+    deallocate(slope_d)
+    deallocate(phi_d)
+    deallocate(umac_d)
 
   end subroutine compute_flux_2d
 
