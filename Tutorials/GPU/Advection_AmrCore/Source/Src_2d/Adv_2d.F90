@@ -6,7 +6,11 @@ subroutine advect(time, lo, hi, &
      &            vy  , vy_lo, vy_hi, &
      &            flxx, fx_lo, fx_hi, &
      &            flxy, fy_lo, fy_hi, &
-     &            dx,dt) bind(C, name="advect")
+     &            dx,dt &
+#ifdef CUDA
+                  , idx, device_id &
+#endif
+                 ) bind(C, name="advect")
   
   use mempool_module, only : bl_allocate, bl_deallocate
   use compute_flux_module, only : compute_flux_2d
@@ -34,6 +38,10 @@ subroutine advect(time, lo, hi, &
 
   ! Some compiler may not support 'contiguous'.  Remove it in that case.
   double precision, dimension(:,:), pointer, contiguous :: phix_1d, phiy_1d, phix, phiy, slope
+
+#ifdef CUDA
+  integer, intent(in) :: idx, device_id
+#endif
 
   dtdx = dt/dx
 
@@ -71,7 +79,11 @@ subroutine advect(time, lo, hi, &
                        vy, vy_lo, vy_hi, &
                        flxx, fx_lo, fx_hi, &
                        flxy, fy_lo, fy_hi, &
-                       phix_1d, phiy_1d, phix, phiy, slope, glo, ghi)
+                       phix_1d, phiy_1d, phix, phiy, slope, glo, ghi& 
+#ifdef CUDA
+                       , idx, device_id &
+#endif
+                       )
 
   ! Final fluxes
   do    j = lo(2), hi(2)

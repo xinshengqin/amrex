@@ -1,3 +1,4 @@
 F90EXE_sources += Adv_$(DIM)d.F90
 F90EXE_sources += slope_$(DIM)d.F90
+F90EXE_sources += slope_$(DIM)d_cuda.F90
 F90EXE_sources += compute_flux_$(DIM)d.F90

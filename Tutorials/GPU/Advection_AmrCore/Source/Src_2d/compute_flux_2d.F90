@@ -14,13 +14,21 @@ contains
                              vmac,  v_lo,  v_hi, &
                              flxx, fx_lo, fx_hi, &
                              flxy, fy_lo, fy_hi, &
-                             phix_1d, phiy_1d, phix, phiy, slope, glo, ghi)
+                             phix_1d, phiy_1d, phix, phiy, slope, glo, ghi &
+#ifdef CUDA
+                             , idx, device_id &
+#endif
+                             )
 
     use slope_module, only: slopey
-    use slope_module_cuda, only: slopex_d
+#ifdef CUDA
+    use cudafor, only: cudaMemcpyAsync
     use cuda_module, only: threads_and_blocks, stream_from_index
     use cuda_module, only: numThreads, numBlocks, cuda_streams 
-    ! use slope_module, only: slopex
+    use slope_module_cuda, only: slopex
+#else
+    use slope_module, only: slopex
+#endif
 
     integer, intent(in) :: lo(2), hi(2), glo(2), ghi(2)
     double precision, intent(in) :: dt, dx(2)
@@ -40,14 +48,17 @@ contains
     integer :: i, j, k
     double precision :: hdtdx(2)
 
-    double precision :: hdtdx_x, hdtdx_y
-
+#ifdef CUDA
     ! device 
+    integer, intent(in) :: idx, device_id
+    double precision :: hdtdx_x, hdtdx_y
+    integer :: cudaResult
     double precision, allocatable, device :: phix_1d_d(:,:), phi_d(:,:), slope_d(:,:), umac_d(:,:)
     allocate(phix_1d_d(glo(1):ghi(1),glo(2):ghi(2)))
     allocate(slope_d(glo(1):ghi(1),glo(2):ghi(2)))
     allocate(phi_d(ph_lo(1):ph_hi(1),ph_lo(2):ph_hi(2)))
     allocate(umac_d( u_lo(1): u_hi(1), u_lo(2): u_hi(2)))
+#endif
 
 
     phi_d = phi
@@ -55,30 +66,20 @@ contains
 
     hdtdx = 0.5*(dt/dx)
 
-    ! call slopex(glo, ghi, &
-    !             phi, ph_lo, ph_hi, &
-    !             slope, glo, ghi)
-    call slopex_d(glo, ghi, &
+    call slopex(glo, ghi, &
                 phi_d, ph_lo, ph_hi, &
-                slope_d, glo, ghi,0,0)
+                slope_d, glo, ghi &
+#ifdef CUDA
+                ,idx,device_id &
+#endif
+                )
     slope = slope_d
 
     ! compute phi on x faces using umac to upwind; ignore transverse terms
-    ! do    j = lo(2)-1, hi(2)+1
-    !    do i = lo(1)  , hi(1)+1
-
-    !       if (umac(i,j) .lt. 0.d0) then
-    !          phix_1d(i,j) = phi(i  ,j) - (0.5d0 + hdtdx(1)*umac(i,j))*slope(i  ,j)
-    !       else
-    !          phix_1d(i,j) = phi(i-1,j) + (0.5d0 - hdtdx(1)*umac(i,j))*slope(i-1,j)
-    !       end if
-
-    !    end do
-    ! end do
-
     hdtdx_x = hdtdx(1)
     hdtdx_y = hdtdx(2)
-    !$cuf kernel do(2) <<< (*,*), (16,16) >>>
+    ! !$cuf kernel do(2) <<<(*,*), (16,16), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
+    !$cuf kernel do(2) <<<(*,*), (16,16)>>> 
     do    j = lo(2)-1, hi(2)+1
        do i = lo(1)  , hi(1)+1
           if (umac_d(i,j) .lt. 0.d0) then
@@ -88,25 +89,24 @@ contains
           end if
        end do
     end do
+    ! do    j = lo(2)-1, hi(2)+1
+    !    do i = lo(1)  , hi(1)+1
+    !       if (umac(i,j) .lt. 0.d0) then
+    !          phix_1d(i,j) = phi(i  ,j) - (0.5d0 + hdtdx_x*umac(i,j))*slope(i  ,j)
+    !       else
+    !          phix_1d(i,j) = phi(i-1,j) + (0.5d0 - hdtdx_x*umac(i,j))*slope(i-1,j)
+    !       end if
+    !    end do
+    ! end do
+
+#ifdef CUDA
     phix_1d = phix_1d_d
-
-
-    ! kernel
-    ! call threads_and_blocks([lo(1), lo(2)-1], [hi(1)+1, hi(2)+1], numBlocks, numThreads)
-    ! call sum_up_kernel<<<numBlocks, numThreads, 0 >>> &
-    !     (lo(1), lo(2)-1, hi(1)+1, hi(2)+1, &
-    !     phi_d,ph_lo(1),ph_hi(1),ph_lo(2),ph_hi(2), &
-    !     umac_d,u_lo(1), u_hi(1), u_lo(2), u_hi(2), &
-    !     slope_d,glo(1),ghi(1),glo(2),ghi(2), &
-    !     phix_1d_d,glo(1),ghi(1),glo(2),ghi(2), &
-    !     hdtdx_x, hdtdx_y)
-
-    ! phix_1d = phix_1d_d
 
     deallocate(phix_1d_d)
     deallocate(slope_d)
     deallocate(phi_d)
     deallocate(umac_d)
+#endif
 
     call slopey(glo, ghi, &
                 phi, ph_lo, ph_hi, &

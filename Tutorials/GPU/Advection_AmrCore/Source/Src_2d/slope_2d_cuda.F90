@@ -6,11 +6,11 @@ module slope_module_cuda
   
   private
  
-  public :: slopex_d, slopey
+  public :: slopex, slopey
  
 contains
  
-  subroutine slopex_d(lo, hi, &
+  subroutine slopex(lo, hi, &
                     q_d, qlo, qhi, &
                     dq_d, dqlo, dqhi, idx, device_id)
 
@@ -25,16 +25,17 @@ contains
     double precision, device, intent(out) :: dq_d(dqlo(1):dqhi(1),dqlo(2):dqhi(2))
 
 
-    integer, intent(in), value :: idx, device_id
+    integer, intent(in) :: idx, device_id
 
 
     call threads_and_blocks(lo, hi, numBlocks, numThreads)
-    call slopex_kernel<<<numBlocks, numThreads, 0, cuda_streams(stream_from_index(idx),device_id)>>> &
+    ! call slopex_kernel<<<numBlocks, numThreads, 0, cuda_streams(stream_from_index(idx),device_id)>>> &
+    call slopex_kernel<<<numBlocks, numThreads>>> &
         (lo(1), lo(2), hi(1), hi(2), &
          q_d, qlo(1), qlo(2), qhi(1), qhi(2), &
          dq_d, dqlo(1), dqlo(2), dqhi(1), dqhi(2))
 
-  end subroutine slopex_d
+  end subroutine slopex
 
 
   subroutine slopey(lo, hi, &
