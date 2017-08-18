@@ -80,10 +80,10 @@ endif
 # TODO:
 # actually invoking this Makefile already indicates that USE_CUDA=TRUE
 ifeq ($(USE_CUDA),TRUE)
-  CXXFLAGS += -lineinfo
-  CFLAGS   += -lineinfo
-  FFLAGS   += -Mcuda=cuda8.0 -Mnomain -Mcuda=lineinfo
-  F90FLAGS += -Mcuda=cuda8.0 -Mnomain -Mcuda=lineinfo
+  CXXFLAGS += -lineinfo -rdc=true
+  CFLAGS   += -lineinfo -rdc=true
+  FFLAGS   += -Mcuda=cuda8.0 -Mnomain -Mcuda=lineinfo -Mcuda=rdc
+  F90FLAGS += -Mcuda=cuda8.0 -Mnomain -Mcuda=lineinfo -Mcuda=rdc
 
   override XTRALIBS += -lstdc++
 endif

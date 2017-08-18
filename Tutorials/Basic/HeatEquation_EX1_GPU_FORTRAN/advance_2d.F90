@@ -1,5 +1,7 @@
 module advance_2d
     implicit none
+    private
+    public :: compute_flux_auto, update_phi
     contains
 
 subroutine compute_flux (lo, hi, phi, philo, phihi, &
@@ -28,13 +30,16 @@ subroutine compute_flux (lo, hi, phi, philo, phihi, &
 #endif
 
 #ifdef CUDA
-    call threads_and_blocks(lo, hi+1, numBlocks, numThreads)
-    call compute_flux_kernel<<<numBlocks, numThreads, 0, cuda_streams(stream_from_index(idx),device_id)>>> &
-            (lo(1), lo(2), hi(1), hi(2), &
-             phi, philo(1), philo(2), phihi(1), phihi(2), &
-             fluxx, fxlo(1), fxlo(2), fxhi(1), fxhi(2), &
-             fluxy, fylo(1), fylo(2), fyhi(1), fyhi(2), &
-             dx(1), dx(2))
+    ! call threads_and_blocks(lo, hi+1, numBlocks, numThreads)
+    ! call compute_flux_kernel<<<numBlocks, numThreads, 0, cuda_streams(stream_from_index(idx),device_id)>>> &
+    !         (lo(1), lo(2), hi(1), hi(2), &
+    !          phi, philo(1), philo(2), phihi(1), phihi(2), &
+    !          fluxx, fxlo(1), fxlo(2), fxhi(1), fxhi(2), &
+    !          fluxy, fylo(1), fylo(2), fyhi(1), fyhi(2), &
+    !          dx(1), dx(2))
+    call compute_flux_auto(lo, hi, phi, philo, phihi, &
+         fluxx, fxlo, fxhi, fluxy, fylo, fyhi, dx & 
+         , idx, device_id) 
 #else
     ! x-fluxes
     idir = 1
@@ -120,6 +125,7 @@ subroutine update_phi (lo, hi, phiold, polo, pohi, phinew, pnlo, pnhi, &
   attributes(device) :: phiold, phinew, fluxx, fluxy
   integer, value :: idx, device_id
 #endif
+
 
 #ifdef CUDA
     call threads_and_blocks(lo, hi, numBlocks, numThreads)
@@ -268,5 +274,53 @@ subroutine compute_flux_gpu (i, j, phi, p_lo, p_hi, flx, f_lo, f_hi, dx, idir)
     endif
 end subroutine compute_flux_gpu
 #endif
+
+! test pgfortran kernel loop directives
+subroutine compute_flux_auto(lo, hi, phi, philo, phihi, &
+     fluxx, fxlo, fxhi, fluxy, fylo, fyhi, dx & 
+     , idx, device_id &
+     )
+
+  use amrex_fort_module, only : amrex_real
+  use cuda_module, only: threads_and_blocks, stream_from_index
+  use cuda_module, only: numThreads, numBlocks, cuda_streams 
+
+  implicit none
+
+  integer lo(2), hi(2), philo(2), phihi(2), fxlo(2), fxhi(2), fylo(2), fyhi(2)
+  real(amrex_real), intent(in)    :: phi  (philo(1):phihi(1),philo(2):phihi(2))
+  real(amrex_real), intent(inout) :: fluxx( fxlo(1): fxhi(1), fxlo(2): fxhi(2))
+  real(amrex_real), intent(inout) :: fluxy( fylo(1): fyhi(1), fylo(2): fyhi(2))
+  real(amrex_real), intent(in)    :: dx(2)
+  integer :: idir
+  attributes(device) :: phi, fluxx, fluxy
+  integer, value :: idx, device_id
+
+
+  ! locals
+  real(amrex_real) :: dx_x, dx_y
+  integer :: i,j
+
+
+  dx_x = dx(1)
+  dx_y = dx(2)
+
+  ! x-fluxes
+  !$cuf kernel do(2) <<<*, (16,16), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
+  do    j = lo(2), hi(2)
+     do i = lo(1), hi(1)+1
+         fluxx(i,j) = ( phi(i,j) - phi(i-1,j) ) / dx_x
+     end do
+  end do
+
+  ! y-fluxes
+  !$cuf kernel do(2) <<<*, (16,16), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
+  do    j = lo(2), hi(2)+1
+     do i = lo(1), hi(1)
+        fluxy(i,j) = ( phi(i,j) - phi(i,j-1) ) / dx_y
+     end do
+  end do
+
+end subroutine 
 
 end module advance_2d
