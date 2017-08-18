@@ -6,13 +6,13 @@ module slope_module_cuda
   
   private
  
-  public :: slopex, slopey
+  public :: slopex_d, slopey
  
 contains
  
-  subroutine slopex(lo, hi, &
-                    q, qlo, qhi, &
-                    dq, dqlo, dqhi, idx, device_id)
+  subroutine slopex_d(lo, hi, &
+                    q_d, qlo, qhi, &
+                    dq_d, dqlo, dqhi, idx, device_id)
 
 
     use cuda_module, only: threads_and_blocks, stream_from_index
@@ -21,22 +21,12 @@ contains
     implicit none
 
     integer, intent(in) :: lo(2), hi(2), qlo(2), qhi(2), dqlo(2), dqhi(2)
-    double precision, intent(in ) ::  q( qlo(1): qhi(1), qlo(2): qhi(2))
-    double precision, intent(out) :: dq(dqlo(1):dqhi(1),dqlo(2):dqhi(2))
+    double precision, device, intent(in ) ::  q_d( qlo(1): qhi(1), qlo(2): qhi(2))
+    double precision, device, intent(out) :: dq_d(dqlo(1):dqhi(1),dqlo(2):dqhi(2))
 
-    ! device 
-    double precision, allocatable, device :: q_d(:,:), dq_d(:,:)
 
     integer, intent(in), value :: idx, device_id
 
-    ! integer :: i, j
-    ! double precision, dimension(lo(1)-1:hi(1)+1) :: dsgn, dlim, df, dcen
-    ! double precision :: dlft, drgt, dq1
-
-    allocate(q_d( qlo(1): qhi(1), qlo(2): qhi(2)))
-    allocate(dq_d(dqlo(1):dqhi(1),dqlo(2):dqhi(2)))
-
-    q_d = q
 
     call threads_and_blocks(lo, hi, numBlocks, numThreads)
     call slopex_kernel<<<numBlocks, numThreads, 0, cuda_streams(stream_from_index(idx),device_id)>>> &
@@ -44,35 +34,7 @@ contains
          q_d, qlo(1), qlo(2), qhi(1), qhi(2), &
          dq_d, dqlo(1), dqlo(2), dqhi(1), dqhi(2))
 
-    dq = dq_d
-
-    deallocate(q_d)
-    deallocate(dq_d)
-
-    ! do j = lo(2), hi(2)
-
-    !    ! first compute Fromm slopes
-    !    do i = lo(1)-1, hi(1)+1
-    !       dlft = q(i  ,j) - q(i-1,j)
-    !       drgt = q(i+1,j) - q(i  ,j)
-    !       dcen(i) = .5d0 * (dlft+drgt)
-    !       dsgn(i) = sign(1.d0, dcen(i))
-    !       if (dlft*drgt .ge. 0.d0) then
-    !          dlim(i) = 2.d0 * min( abs(dlft), abs(drgt) )
-    !       else
-    !          dlim(i) = 0.d0
-    !       endif
-    !       df(i) = dsgn(i)*min( dlim(i), abs(dcen(i)) )
-    !    end do
-
-    !    ! Now limited fourth order slopes
-    !    do i = lo(1), hi(1)
-    !       dq1 = four3rd*dcen(i) - sixth*(df(i+1) + df(i-1))
-    !       dq(i,j) = dsgn(i)*min(dlim(i),abs(dq1))
-    !    end do
-    ! enddo
-
-  end subroutine slopex
+  end subroutine slopex_d
 
 
   subroutine slopey(lo, hi, &
@@ -163,7 +125,7 @@ contains
     double precision, intent(in ) ::  q( qlo_x: qhi_x, qlo_y: qhi_y)
     double precision, intent(out) :: dq(dqlo_x:dqhi_x,dqlo_y:dqhi_y)
 
-    integer :: blo(2), bhi(2);
+    integer :: blo(2), bhi(2)
 
     call get_loop_bounds(blo, bhi, [lo_x, lo_y], [hi_x, hi_y])
     call slopex_doit(blo, bhi, &
