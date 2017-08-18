@@ -918,6 +918,7 @@ public:
                          int               destcomp,
                          int               numcomp);
     int deviceID() {return device_id;}
+    int deviceID() const {return device_id;}
 
 #ifdef CUDA_ARRAY
     //! get pitch of the CUDA 2D array
