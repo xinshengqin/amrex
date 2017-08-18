@@ -40,7 +40,7 @@ subroutine advect(time, lo, hi, &
   double precision, dimension(:,:), pointer, contiguous :: phix_1d, phiy_1d, phix, phiy, slope
 
 #ifdef CUDA
-  integer, intent(in) :: idx, device_id
+  integer, value, intent(in) :: idx, device_id
 #endif
 
   dtdx = dt/dx

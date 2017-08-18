@@ -22,7 +22,8 @@ contains
 
     use slope_module, only: slopey
 #ifdef CUDA
-    use cudafor, only: cudaMemcpyAsync
+    use cudafor, only: cudaMemcpyAsync, cudaMemcpyHostToDevice, & 
+        cudaMemcpyDeviceToHost, cudaDeviceSynchronize, cudaMemcpy
     use cuda_module, only: threads_and_blocks, stream_from_index
     use cuda_module, only: numThreads, numBlocks, cuda_streams 
     use slope_module_cuda, only: slopex
@@ -53,7 +54,9 @@ contains
     integer, intent(in) :: idx, device_id
     double precision :: hdtdx_x, hdtdx_y
     integer :: cudaResult
+    integer :: phi_size, umac_size, slope_size, phix_1d_size
     double precision, allocatable, device :: phix_1d_d(:,:), phi_d(:,:), slope_d(:,:), umac_d(:,:)
+    ! TODO: can replace this with our own device memory allocator
     allocate(phix_1d_d(glo(1):ghi(1),glo(2):ghi(2)))
     allocate(slope_d(glo(1):ghi(1),glo(2):ghi(2)))
     allocate(phi_d(ph_lo(1):ph_hi(1),ph_lo(2):ph_hi(2)))
@@ -61,8 +64,13 @@ contains
 #endif
 
 
-    phi_d = phi
-    umac_d = umac
+    phi_size = (ph_hi(1)-ph_lo(1)+1) * (ph_hi(2)-ph_lo(2)+1)
+    umac_size = (u_hi(1)-u_lo(1)+1) * (u_hi(2)-u_lo(2)+1)
+    slope_size = (ghi(1)-glo(1)+1) * (ghi(2)-glo(2)+1)
+    phix_1d_size = (ghi(1)-glo(1)+1) * (ghi(2)-glo(2)+1)
+
+    cudaResult = cudaMemcpyAsync(phi_d, phi, phi_size, cudaMemcpyHostToDevice, cuda_streams(stream_from_index(idx),device_id))
+    cudaResult = cudaMemcpyAsync(umac_d, umac, umac_size, cudaMemcpyHostToDevice, cuda_streams(stream_from_index(idx),device_id))
 
     hdtdx = 0.5*(dt/dx)
 
@@ -73,13 +81,12 @@ contains
                 ,idx,device_id &
 #endif
                 )
-    slope = slope_d
 
     ! compute phi on x faces using umac to upwind; ignore transverse terms
     hdtdx_x = hdtdx(1)
     hdtdx_y = hdtdx(2)
-    ! !$cuf kernel do(2) <<<(*,*), (16,16), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
-    !$cuf kernel do(2) <<<(*,*), (16,16)>>> 
+
+    !$cuf kernel do(2) <<<(*,*), (16,16), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do    j = lo(2)-1, hi(2)+1
        do i = lo(1)  , hi(1)+1
           if (umac_d(i,j) .lt. 0.d0) then
@@ -89,18 +96,11 @@ contains
           end if
        end do
     end do
-    ! do    j = lo(2)-1, hi(2)+1
-    !    do i = lo(1)  , hi(1)+1
-    !       if (umac(i,j) .lt. 0.d0) then
-    !          phix_1d(i,j) = phi(i  ,j) - (0.5d0 + hdtdx_x*umac(i,j))*slope(i  ,j)
-    !       else
-    !          phix_1d(i,j) = phi(i-1,j) + (0.5d0 - hdtdx_x*umac(i,j))*slope(i-1,j)
-    !       end if
-    !    end do
-    ! end do
 
 #ifdef CUDA
-    phix_1d = phix_1d_d
+    cudaResult = cudaMemcpyAsync(slope, slope_d, slope_size, cudaMemcpyDeviceToHost, cuda_streams(stream_from_index(idx),device_id))
+    cudaResult = cudaMemcpyAsync(phix_1d, phix_1d_d, phix_1d_size, cudaMemcpyDeviceToHost, cuda_streams(stream_from_index(idx),device_id))
+    cudaResult = cudaDeviceSynchronize()
 
     deallocate(phix_1d_d)
     deallocate(slope_d)
@@ -162,47 +162,5 @@ contains
     end do
 
   end subroutine compute_flux_2d
-
-    attributes(global) &
-    subroutine sum_up_kernel(lo_x, lo_y, hi_x, hi_y, &
-                    phi, phi_lo_x, phi_lo_y, phi_hi_x, phi_hi_y, &
-                    umac, umac_lo_x, umac_lo_y, umac_hi_x, umac_hi_y, &
-                    slope, slope_lo_x, slope_lo_y, slope_hi_x, slope_hi_y, &
-                    phix_1d, phix_1d_lo_x, phix_1d_lo_y, phix_1d_hi_x, phix_1d_hi_y, &
-                    hdtdx_x, hdtdx_y) 
-
-
-        use amrex_fort_module, only: get_loop_bounds
-        implicit none
-
-        integer, value, intent(in) :: lo_x, lo_y, hi_x, hi_y
-        integer, value, intent(in) :: phi_lo_x, phi_lo_y, phi_hi_x, phi_hi_y
-        integer, value, intent(in) :: umac_lo_x, umac_lo_y, umac_hi_x, umac_hi_y
-        integer, value, intent(in) :: slope_lo_x, slope_lo_y, slope_hi_x, slope_hi_y
-        integer, value, intent(in) :: phix_1d_lo_x, phix_1d_lo_y, phix_1d_hi_x, phix_1d_hi_y
-
-        double precision, intent(in ) :: phi(phi_lo_x:phi_hi_x, phi_lo_y:phi_hi_y)
-        double precision, intent(in ) :: umac(umac_lo_x:umac_hi_x, umac_lo_y:umac_hi_y)
-        double precision, intent(in ) :: slope(slope_lo_x:slope_hi_x, slope_lo_y:slope_hi_y)
-        double precision, intent(out) :: phix_1d(phix_1d_lo_x:phix_1d_hi_x, phix_1d_lo_y:phix_1d_hi_y)
-        double precision, value, intent(in)  :: hdtdx_x, hdtdx_y
-
-        integer :: blo(2), bhi(2)
-        integer :: i, j
-
-        call get_loop_bounds(blo, bhi, [lo_x, lo_y], [hi_x, hi_y])
-        ! compute phi on x faces using umac to upwind; ignore transverse terms
-        do    j = blo(2), bhi(2)
-           do i = blo(1), bhi(1)
-
-              if (umac(i,j) .lt. 0.d0) then
-                 phix_1d(i,j) = phi(i  ,j) - (0.5d0 + hdtdx_x*umac(i,j))*slope(i  ,j)
-              else
-                 phix_1d(i,j) = phi(i-1,j) + (0.5d0 - hdtdx_x*umac(i,j))*slope(i-1,j)
-              end if
-
-           end do
-        end do
-    end subroutine sum_up_kernel
 
 end module compute_flux_module

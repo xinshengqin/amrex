@@ -29,8 +29,7 @@ contains
 
 
     call threads_and_blocks(lo, hi, numBlocks, numThreads)
-    ! call slopex_kernel<<<numBlocks, numThreads, 0, cuda_streams(stream_from_index(idx),device_id)>>> &
-    call slopex_kernel<<<numBlocks, numThreads>>> &
+    call slopex_kernel<<<numBlocks, numThreads, 0, cuda_streams(stream_from_index(idx),device_id)>>> &
         (lo(1), lo(2), hi(1), hi(2), &
          q_d, qlo(1), qlo(2), qhi(1), qhi(2), &
          dq_d, dqlo(1), dqlo(2), dqhi(1), dqhi(2))
