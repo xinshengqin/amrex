@@ -1,7 +1,8 @@
 AMREX_HOME ?= ../../../../..
 
 PRECISION  = DOUBLE
-PROFILE    = FALSE
+# PROFILE    = TRUE
+TINY_PROFILE    = TRUE
 
 DEBUG      = TRUE
 DEBUG      = FALSE
@@ -11,8 +12,8 @@ DIM        = 2
 
 COMP	   = gnu
 
-USE_MPI    = TRUE
-USE_OMP    = FALSE
+USE_MPI    = FALSE
+USE_OMP    = TRUE
 
 Bpack   := ./Make.package 
 Blocs   := . 
