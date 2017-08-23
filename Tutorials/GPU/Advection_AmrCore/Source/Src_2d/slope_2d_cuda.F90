@@ -134,10 +134,10 @@ contains
     ! call bl_deallocate(dlim)
     ! call bl_deallocate(df)
     ! call bl_deallocate(dcen)
-    ! deallocate(dsgn)
-    ! deallocate(dlim)
-    ! deallocate(df)
-    ! deallocate(dcen)
+    deallocate(dsgn)
+    deallocate(dlim)
+    deallocate(df)
+    deallocate(dcen)
 
   end subroutine slopey_cuf
 
