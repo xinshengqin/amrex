@@ -556,6 +556,10 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	    // Allocate fabs for fluxes and Godunov velocities.
 	    for (int i = 0; i < BL_SPACEDIM ; i++) {
 		const Box& bxtmp = amrex::surroundingNodes(bx,i);
+#ifdef CUDA
+		flux[i].setDevice(statein.deviceID());
+		uface[i].setDevice(statein.deviceID());
+#endif
 		flux[i].resize(bxtmp,S_new.nComp());
 		uface[i].resize(amrex::grow(bxtmp,1),1);
 	    }
@@ -567,8 +571,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 				     BL_TO_FORTRAN(uface[2])),
 			      dx, prob_lo);
 
-// #ifdef CUDA
-#ifdef NONSENSE
+#ifdef CUDA
             int idx = mfi.LocalIndex();
             statein.toDevice(idx);
             uface[0].toDevice(idx);
@@ -601,6 +604,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 		   dx, dt, idx, statein.deviceID());
 #endif
 
+            gpu_synchronize();
 	    if (do_reflux) {
 		for (int i = 0; i < BL_SPACEDIM ; i++) {
 		    fluxes[i][mfi].copy(flux[i],mfi.nodaltilebox(i));	  
@@ -689,6 +693,9 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 	{
 	    for (int i = 0; i < BL_SPACEDIM ; i++) {
 		const Box& bx = mfi.nodaltilebox(i);
+#ifdef CUDA
+		uface[i].setDevice(S_new[mfi].deviceID());
+#endif
 		uface[i].resize(bx,1);
 	    }
 
