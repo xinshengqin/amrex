@@ -405,16 +405,16 @@ public:
                              const void* src);
 
     //! Allocates memory for the device copy.
-    void allocate_device (int device_id = 0);
+    void allocate_device ();
 
     //! Initialize allocated memory on device
     void initialize_device();
 
     //! Transfer data from the host to the device on the stream corresponding to MFIter index idx.
-    void toDevice(int idx = -1);
+    void toDevice(int idx = -1) const;
 
     //! Transfer data from the device to the host on the stream corresponding to MFIter index idx.
-    void toHost(int idx = -1);
+    void toHost(int idx = -1) const;
 
     /**
     * \brief Perform shifts upon the domain of the BaseFab. They are
@@ -919,6 +919,7 @@ public:
                          int               numcomp);
     int deviceID() {return device_id;}
     int deviceID() const {return device_id;}
+    void setDevice(int device_id_) { device_id = device_id_; }
 
 #ifdef CUDA_ARRAY
     //! get pitch of the CUDA 2D array
@@ -945,7 +946,7 @@ protected:
                       const Box&        destbox,
                       int               destcomp,
                       int               numcomp);
-    bool right_GPU_is_used() { 
+    bool right_GPU_is_used() const { 
         int gpu_used = -1;
         checkCudaErrors(cudaGetDevice(&gpu_used));
         return (gpu_used == device_id);
@@ -1269,6 +1270,9 @@ BaseFab<T>::BaseFab ()
     dptr_d(0),
     ptr_owner(false),
     device_copy(false),
+#ifdef CUDA
+    device_id(-1),
+#endif
     shared_memory(false)
 {}
 
@@ -1288,7 +1292,7 @@ BaseFab<T>::BaseFab (const Box& bx,
     ptr_owner(false),
     device_copy(false),
 #ifdef CUDA
-    device_id(0),
+    device_id(-1),
 #endif
     shared_memory(shared)
 {
@@ -1307,6 +1311,9 @@ BaseFab<T>::BaseFab (const BaseFab<T>& rhs, MakeType make_type, int scomp, int n
     dptr_d(0),
     device_copy(false),
     ptr_owner(false),
+#ifdef CUDA
+    device_id(-1),
+#endif
     shared_memory(false)
 {
     BL_ASSERT(scomp+ncomp <= rhs.nComp());
@@ -1334,6 +1341,9 @@ BaseFab<T>::BaseFab (const Box& bx, int ncomp, T* p)
     dptr_d(0),
     device_copy(false),
     ptr_owner(false),
+#ifdef CUDA
+    device_id(-1),
+#endif
     shared_memory(false)
 {
 }
@@ -1355,6 +1365,9 @@ BaseFab<T>::BaseFab (BaseFab<T>&& rhs) noexcept
     dptr(rhs.dptr),
     dptr_d(0),
     ptr_owner(rhs.ptr_owner),
+#ifdef CUDA
+    device_id(-1),
+#endif
     shared_memory(rhs.shared_memory)
 {
     rhs.dptr = nullptr;
@@ -1385,6 +1398,11 @@ BaseFab<T>::resize (const Box& b,
 	    amrex::Abort("BaseFab::resize: BaseFab in shared memory cannot increase size");
 
         define();
+#ifdef CUDA
+        BL_ASSERT(device_id >= 0);
+        BL_ASSERT(dptr_d == 0);
+        allocate_device();
+#endif
     }
     else if (nvar*numpts > truesize)
     {
@@ -1394,6 +1412,11 @@ BaseFab<T>::resize (const Box& b,
         clear();
 
         define();
+#ifdef CUDA
+        BL_ASSERT(device_id >= 0);
+        BL_ASSERT(dptr_d == 0);
+        allocate_device();
+#endif
     }
 }
 
@@ -1401,16 +1424,16 @@ BaseFab<T>::resize (const Box& b,
 
 template <class T>
 void
-BaseFab<T>::allocate_device(int dev_id) {
+BaseFab<T>::allocate_device() {
 
 #ifdef CUDA
-    BL_ASSERT(dev_id >= 0);
-    device_id = dev_id;
+    BL_ASSERT(device_id >= 0);
+    BL_ASSERT(dptr_d == 0);
     device_copy = true;
 #ifdef CUDA_ARRAY
-    dptr_d = static_cast<T*>(amrex::The_Arena()->alloc_device_2d(pitch, dlen[0]*sizeof(T), dlen[1], dev_id));
+    dptr_d = static_cast<T*>(amrex::The_Arena()->alloc_device_2d(pitch, dlen[0]*sizeof(T), dlen[1], device_id));
 #else
-    dptr_d = static_cast<T*>(amrex::The_Arena()->alloc_device(truesize*sizeof(T), dev_id));
+    dptr_d = static_cast<T*>(amrex::The_Arena()->alloc_device(truesize*sizeof(T), device_id));
 #endif
     this->initialize_device();
 #endif
@@ -2896,7 +2919,7 @@ BaseFab<T>::linComb (const BaseFab<T>&  f1,
 
 template<class T>
 void
-BaseFab<T>::toDevice(int idx)
+BaseFab<T>::toDevice(int idx) const
 {
     size_t sz = nBytes();
 #ifdef CUDA
@@ -2924,7 +2947,7 @@ BaseFab<T>::toDevice(int idx)
 
 template<class T>
 void
-BaseFab<T>::toHost(int idx)
+BaseFab<T>::toHost(int idx) const
 {
     size_t sz = nBytes();
 #ifdef CUDA

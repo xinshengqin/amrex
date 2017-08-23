@@ -36,7 +36,12 @@ extern "C"
 		AMREX_D_DECL(BL_FORT_FAB_ARG_3D(fx),
 		       BL_FORT_FAB_ARG_3D(fy),
 		       BL_FORT_FAB_ARG_3D(fz)),
-		const amrex_real* dx, const amrex_real& dt);
+		const amrex_real* dx, const amrex_real& dt
+#ifdef CUDA
+                      , const int idx = 0
+                      , const int device_id = 0
+#endif
+                );
 
 #ifdef __cplusplus
 }

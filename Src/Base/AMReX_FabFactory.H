@@ -56,7 +56,10 @@ public:
     {
         FAB* fab = new FAB(box, ncomps, info.alloc, info.shared);
 #ifdef CUDA
-	if (info.device) fab->allocate_device(info.device_id);
+	if (info.device) {
+            fab->setDevice(info.device_id);
+            fab->allocate_device();
+        }
 #endif
 	return fab;
     }

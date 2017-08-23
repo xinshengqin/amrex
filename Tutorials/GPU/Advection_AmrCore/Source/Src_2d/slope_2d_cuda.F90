@@ -108,6 +108,10 @@ contains
     
     integer, intent(in) :: idx, device_id
 
+#ifdef CUDA
+    attributes(device) :: q, dq
+#endif
+
     ! ! Some compiler may not support 'contiguous'.  Remove it in that case.
     ! double precision, dimension(:,:), pointer, contiguous :: dsgn, dlim, df, dcen
 
@@ -130,10 +134,10 @@ contains
     ! call bl_deallocate(dlim)
     ! call bl_deallocate(df)
     ! call bl_deallocate(dcen)
-    deallocate(dsgn)
-    deallocate(dlim)
-    deallocate(df)
-    deallocate(dcen)
+    ! deallocate(dsgn)
+    ! deallocate(dlim)
+    ! deallocate(df)
+    ! deallocate(dcen)
 
   end subroutine slopey_cuf
 
