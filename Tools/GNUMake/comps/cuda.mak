@@ -39,8 +39,13 @@ ifeq ($(DEBUG),TRUE)
 
   CXXFLAGS += -G -Xptxas=-v -Xcompiler='-g -O0 -fno-inline -ggdb -Wall -Wno-sign-compare -ftrapv'
   CFLAGS   += -G -Xptxas=-v -Xcompiler='-g -O0 -fno-inline -ggdb -Wall -Wno-sign-compare -ftrapv'
-  FFLAGS   += -g -O0 -Mbounds -Ktrap=divz,inv -Mchkptr
-  F90FLAGS += -g -O0 -Mbounds -Ktrap=divz,inv -Mchkptr
+
+  # FFLAGS   += -g -O0 -Mbounds -Ktrap=divz,inv -Mchkptr
+  # F90FLAGS += -g -O0 -Mbounds -Ktrap=divz,inv -Mchkptr
+   
+  # When CUDA Fortran Kernel Loop Directive is used, -Mchkptr must be removed
+  FFLAGS   += -g -O0 -Mbounds -Ktrap=divz,inv
+  F90FLAGS += -g -O0 -Mbounds -Ktrap=divz,inv
 
 else
 
