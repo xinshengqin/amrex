@@ -605,6 +605,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 		   dx, dt, idx, statein.deviceID());
 #endif
 
+            gpu_synchronize();
 	    if (do_reflux) {
 		for (int i = 0; i < BL_SPACEDIM ; i++) {
 		    fluxes[i][mfi].copy(flux[i],mfi.nodaltilebox(i));	  
