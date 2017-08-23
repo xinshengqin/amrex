@@ -342,7 +342,7 @@ AmrCoreAdv::CountCells (int lev)
     return cnt;
 }
 
-// compute a new multifab by coping in phi from valid region and filling ghost cells
+// compute a new multifab by copying in phi from valid region and filling ghost cells
 // works for single level and 2-level cases (fill fine grid ghost by interpolating from coarse)
 void
 AmrCoreAdv::FillPatch (int lev, Real time, MultiFab& mf, int icomp, int ncomp)
@@ -546,7 +546,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
     {
 	FArrayBox flux[BL_SPACEDIM], uface[BL_SPACEDIM];
 
-	for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi)
+	for (MFIter mfi(S_new, false); mfi.isValid(); ++mfi)
 	{
 	    const Box& bx = mfi.tilebox();
 
@@ -567,7 +567,28 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 				     BL_TO_FORTRAN(uface[2])),
 			      dx, prob_lo);
 
+// #ifdef CUDA
+#ifdef NONSENSE
+            int idx = mfi.LocalIndex();
+            statein.toDevice(idx);
+            uface[0].toDevice(idx);
+            uface[1].toDevice(idx);
+            advect(time, bx.loVect(), bx.hiVect(),
+		   BL_TO_FORTRAN_3D_DEVICE(statein), 
+		   BL_TO_FORTRAN_3D_DEVICE(stateout),
+		   AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(uface[0]),
+			  BL_TO_FORTRAN_3D_DEVICE(uface[1]),
+			  BL_TO_FORTRAN_3D_DEVICE(uface[2])),
+		   AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(flux[0]), 
+			  BL_TO_FORTRAN_3D_DEVICE(flux[1]), 
+			  BL_TO_FORTRAN_3D_DEVICE(flux[2])), 
+		   dx, dt, idx, statein.deviceID());
+            stateout.toHost(idx);
+            flux[0].toHost(idx);
+            flux[1].toHost(idx);
+#else
             // compute new state (stateout) and fluxes.
+            int idx = mfi.LocalIndex();
             advect(time, bx.loVect(), bx.hiVect(),
 		   BL_TO_FORTRAN_3D(statein), 
 		   BL_TO_FORTRAN_3D(stateout),
@@ -577,7 +598,8 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 		   AMREX_D_DECL(BL_TO_FORTRAN_3D(flux[0]), 
 			  BL_TO_FORTRAN_3D(flux[1]), 
 			  BL_TO_FORTRAN_3D(flux[2])), 
-		   dx, dt);
+		   dx, dt, idx, statein.deviceID());
+#endif
 
 	    if (do_reflux) {
 		for (int i = 0; i < BL_SPACEDIM ; i++) {

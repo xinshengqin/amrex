@@ -108,6 +108,10 @@ contains
     
     integer, intent(in) :: idx, device_id
 
+#ifdef CUDA
+    attributes(device) :: q, dq
+#endif
+
     ! ! Some compiler may not support 'contiguous'.  Remove it in that case.
     ! double precision, dimension(:,:), pointer, contiguous :: dsgn, dlim, df, dcen
 
