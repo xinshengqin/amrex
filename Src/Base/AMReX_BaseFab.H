@@ -1435,7 +1435,7 @@ BaseFab<T>::allocate_device() {
 #else
     dptr_d = static_cast<T*>(amrex::The_Arena()->alloc_device(truesize*sizeof(T), device_id));
 #endif
-    this->initialize_device();
+    // this->initialize_device();
 #endif
 
 }
@@ -2976,6 +2976,7 @@ void
 BaseFab<T>::initialize_device()
 {
     if (device_copy && dptr_d && dptr) {
+        checkCudaErrors(cudaSetDevice(device_id));
         cudaMemset(dptr_d, 0, nBytes());
     }
 }
