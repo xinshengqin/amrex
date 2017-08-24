@@ -1,5 +1,11 @@
-
-subroutine advect(time, lo, hi, &
+module advect_doit_module
+#ifdef CUDA
+    use cuda_module, only: threads_and_blocks, stream_from_index
+    use cuda_module, only: numThreads, numBlocks, cuda_streams 
+#endif
+    implicit none
+    contains
+subroutine advect_doit(time, lo, hi, &
      &            uin , ui_lo, ui_hi, &
      &            uout, uo_lo, uo_hi, &
      &            vx  , vx_lo, vx_hi, &
@@ -8,9 +14,15 @@ subroutine advect(time, lo, hi, &
      &            flxx, fx_lo, fx_hi, &
      &            flxy, fy_lo, fy_hi, &
      &            flxz, fz_lo, fz_hi, &
-     &            dx,dt) bind(C, name="advect")
+     &            dx,dt &
+#ifdef CUDA
+                  , idx, device_id &
+#endif
+                )
   
+#ifndef CUDA
   use mempool_module, only : bl_allocate, bl_deallocate
+#endif
   use compute_flux_module, only : compute_flux_3d
 
   implicit none
@@ -37,16 +49,43 @@ subroutine advect(time, lo, hi, &
   integer :: i, j, k
   integer :: glo(3), ghi(3)
   double precision :: dtdx(3), umax, vmax, wmax
+#ifdef CUDA
+  double precision :: dtdx_x, dtdx_y, dtdx_z, dx_x, dx_y, dx_z
+#endif
 
+#ifdef CUDA
+  integer, value, intent(in) :: idx, device_id
+  attributes(device) :: uin, uout, vx, vy, vz, flxx, flxy, flxz
+#endif
+
+#ifdef CUDA
+  double precision, device, allocatable :: &
+       phix(:,:,:), phix_y(:,:,:), phix_z(:,:,:), phiy(:,:,:), phiy_x(:,:,:), phiy_z(:,:,:), phiz(:,:,:), phiz_x(:,:,:), phiz_y(:,:,:), slope(:,:,:)
+#else
   ! Some compiler may not support 'contiguous'.  Remove it in that case.
   double precision, dimension(:,:,:), pointer, contiguous :: &
        phix, phix_y, phix_z, phiy, phiy_x, phiy_z, phiz, phiz_x, phiz_y, slope
+
+#endif
 
   dtdx = dt/dx
 
   glo = lo - 1
   ghi = hi + 1
 
+#ifdef CUDA
+  allocate(phix  (glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
+  allocate(phix_y(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
+  allocate(phix_z(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
+  allocate(phiy  (glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
+  allocate(phiy_x(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
+  allocate(phiy_z(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
+  allocate(phiz  (glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
+  allocate(phiz_x(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
+  allocate(phiz_y(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
+  
+  allocate(slope (glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )  
+#else
   ! edge states
   call bl_allocate(phix  ,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
   call bl_allocate(phix_y,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
@@ -66,7 +105,10 @@ subroutine advect(time, lo, hi, &
   ! we like to use AMReX's bl_allocate to allocate memeory instead of the intrinsic
   ! allocate.  Bl_allocate is much faster than allocate inside OMP.  
   ! Note that one MUST CALL BL_DEALLOCATE.
+#endif
 
+! TODO: write CUDA version of this
+#ifndef CUDA
   ! check if CFL condition is violated.
   umax = maxval(abs(vx))
   vmax = maxval(abs(vy))
@@ -77,6 +119,7 @@ subroutine advect(time, lo, hi, &
      print *, "umax = ", umax, ", vmax = ", vmax, ", wmax = ", wmax, ", dt = ", dt, ", dx = ", dx
      call bl_error("CFL violation. Use smaller adv.cfl.")
   end if
+#endif
 
   ! call a function to compute flux
   call compute_flux_3d(lo, hi, dt, dx, &
@@ -90,43 +133,69 @@ subroutine advect(time, lo, hi, &
                        phix, phix_y, phix_z, &
                        phiy, phiy_x, phiy_z, &
                        phiz, phiz_x, phiz_y, &
-                       slope, glo, ghi)
+                       slope, glo, ghi &
+#ifdef CUDA
+                       , idx, device_id &
+#endif
+                       )
 
   ! Do a conservative update
+  dtdx_x = dtdx(1)
+  dtdx_y = dtdx(2)
+  dtdx_z = dtdx(3)
+  !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
   do       k = lo(3), hi(3)
      do    j = lo(2), hi(2)
         do i = lo(1), hi(1)
            uout(i,j,k) = uin(i,j,k) + &
-                ( (flxx(i,j,k) - flxx(i+1,j,k)) * dtdx(1) &
-                + (flxy(i,j,k) - flxy(i,j+1,k)) * dtdx(2) &
-                + (flxz(i,j,k) - flxz(i,j,k+1)) * dtdx(3) )
+                ( (flxx(i,j,k) - flxx(i+1,j,k)) * dtdx_x &
+                + (flxy(i,j,k) - flxy(i,j+1,k)) * dtdx_y &
+                + (flxz(i,j,k) - flxz(i,j,k+1)) * dtdx_z )
         enddo
      enddo
   enddo
 
   ! Scale by face area in order to correctly reflx
+  dx_x = dx(1)
+  dx_y = dx(2)
+  dx_z = dx(3)
+  !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
   do       k = lo(3), hi(3)
      do    j = lo(2), hi(2)
         do i = lo(1), hi(1)+1
-           flxx(i,j,k) = flxx(i,j,k) * (dt * dx(2)*dx(3))
+           flxx(i,j,k) = flxx(i,j,k) * (dt * dx_y*dx_z)
         enddo
      enddo
   enddo
+  !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
   do       k = lo(3), hi(3)
      do    j = lo(2), hi(2)+1 
         do i = lo(1), hi(1)
-           flxy(i,j,k) = flxy(i,j,k) * (dt * dx(1)*dx(3))
+           flxy(i,j,k) = flxy(i,j,k) * (dt * dx_x*dx_z)
         enddo
      enddo
   enddo
+  !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
   do       k = lo(3), hi(3)+1
      do    j = lo(2), hi(2)
         do i = lo(1), hi(1)
-           flxz(i,j,k) = flxz(i,j,k) * (dt * dx(1)*dx(2))
+           flxz(i,j,k) = flxz(i,j,k) * (dt * dx_x*dx_y)
         enddo
      enddo
   enddo
 
+#ifdef CUDA
+  deallocate(phix  )
+  deallocate(phix_y)
+  deallocate(phix_z)
+  deallocate(phiy  )
+  deallocate(phiy_x)
+  deallocate(phiy_z)
+  deallocate(phiz  )
+  deallocate(phiz_x)
+  deallocate(phiz_y)
+  deallocate(slope)
+#else
   call bl_deallocate(phix  )
   call bl_deallocate(phix_y)
   call bl_deallocate(phix_z)
@@ -137,5 +206,7 @@ subroutine advect(time, lo, hi, &
   call bl_deallocate(phiz_x)
   call bl_deallocate(phiz_y)
   call bl_deallocate(slope)
+#endif
 
-end subroutine advect
+end subroutine advect_doit
+end module advect_doit_module

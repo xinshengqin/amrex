@@ -1,4 +1,8 @@
 module compute_flux_module
+#ifdef CUDA
+    use cuda_module, only: threads_and_blocks, stream_from_index
+    use cuda_module, only: numThreads, numBlocks, cuda_streams 
+#endif
 
   implicit none
 
@@ -19,7 +23,11 @@ contains
                              phix, phix_y, phix_z, &
                              phiy, phiy_x, phiy_z, &
                              phiz, phiz_x, phiz_y, &
-                             slope, glo, ghi)
+                             slope, glo, ghi &
+#ifdef CUDA
+                             , idx, device_id &
+#endif
+                             )
 
     use slope_module, only: slopex, slopey, slopez
 
@@ -44,23 +52,41 @@ contains
          
     integer :: i, j, k
     double precision :: hdtdx(3), tdtdx(3)
+#ifdef CUDA
+    attributes(device) :: phi, umac, vmac, wmac, &
+        flxx, flxy, flxz, &
+        phix, phix_y, phix_z, phiy, phiy_x, phiy_z, phiz, phiz_x, phiz_y, slope
+    ! device 
+    integer, intent(in) :: idx, device_id
+    double precision :: hdtdx_x, hdtdx_y, hdtdx_z
+    double precision :: tdtdx_x, tdtdx_y, tdtdx_z
+    integer :: cudaResult
+#endif
 
     hdtdx = 0.5*(dt/dx)
     tdtdx = (1.d0/3.d0)*(dt/dx)
 
     call slopex(glo, ghi, &
                 phi, ph_lo, ph_hi, &
-                slope, glo, ghi)
+                slope, glo, ghi &
+#ifdef CUDA
+                ,idx,device_id &
+#endif
+                )
                 
+    hdtdx_x = hdtdx(1)
+    hdtdx_y = hdtdx(2)
+    hdtdx_z = hdtdx(3)
     ! compute phi on x faces using umac to upwind; ignore transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k = lo(3)-1, hi(3)+1
        do    j = lo(2)-1, hi(2)+1
           do i = lo(1)  , hi(1)+1
 
              if (umac(i,j,k) .lt. 0.d0) then
-                phix(i,j,k) = phi(i  ,j,k) - (0.5d0 + hdtdx(1)*umac(i,j,k))*slope(i  ,j,k)
+                phix(i,j,k) = phi(i  ,j,k) - (0.5d0 + hdtdx_x*umac(i,j,k))*slope(i  ,j,k)
              else
-                phix(i,j,k) = phi(i-1,j,k) + (0.5d0 - hdtdx(1)*umac(i,j,k))*slope(i-1,j,k)
+                phix(i,j,k) = phi(i-1,j,k) + (0.5d0 - hdtdx_x*umac(i,j,k))*slope(i-1,j,k)
              end if
 
           end do
@@ -69,17 +95,22 @@ contains
 
     call slopey(glo, ghi, &
                 phi, ph_lo, ph_hi, &
-                slope, glo, ghi)
+                slope, glo, ghi &
+#ifdef CUDA
+                ,idx,device_id &
+#endif
+                )
                 
     ! compute phi on y faces using vmac to upwind; ignore transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k = lo(3)-1, hi(3)+1
        do    j = lo(2)  , hi(2)+1
           do i = lo(1)-1, hi(1)+1
 
              if (vmac(i,j,k) .lt. 0.d0) then
-                phiy(i,j,k) = phi(i,j  ,k) - (0.5d0 + hdtdx(2)*vmac(i,j,k))*slope(i,j  ,k)
+                phiy(i,j,k) = phi(i,j  ,k) - (0.5d0 + hdtdx_y*vmac(i,j,k))*slope(i,j  ,k)
              else
-                phiy(i,j,k) = phi(i,j-1,k) + (0.5d0 - hdtdx(2)*vmac(i,j,k))*slope(i,j-1,k)
+                phiy(i,j,k) = phi(i,j-1,k) + (0.5d0 - hdtdx_y*vmac(i,j,k))*slope(i,j-1,k)
              end if
 
           end do
@@ -88,17 +119,22 @@ contains
 
     call slopez(glo, ghi, &
                 phi, ph_lo, ph_hi, &
-                slope, glo, ghi)
+                slope, glo, ghi &
+#ifdef CUDA
+                ,idx,device_id &
+#endif
+                )
                 
     ! compute phi on z faces using wmac to upwind; ignore transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k = lo(3)  , hi(3)+1
        do    j = lo(2)-1, hi(2)+1
           do i = lo(1)-1, hi(1)+1
 
              if (wmac(i,j,k) .lt. 0.d0) then
-                phiz(i,j,k) = phi(i,j,k  ) - (0.5d0 + hdtdx(3)*wmac(i,j,k))*slope(i,j,k  )
+                phiz(i,j,k) = phi(i,j,k  ) - (0.5d0 + hdtdx_z*wmac(i,j,k))*slope(i,j,k  )
              else
-                phiz(i,j,k) = phi(i,j,k-1) + (0.5d0 - hdtdx(3)*wmac(i,j,k))*slope(i,j,k-1)
+                phiz(i,j,k) = phi(i,j,k-1) + (0.5d0 - hdtdx_z*wmac(i,j,k))*slope(i,j,k-1)
              end if
 
           end do
@@ -109,17 +145,22 @@ contains
     ! transverse terms
     !!!!!!!!!!!!!!!!!!!!
 
+    tdtdx_x = tdtdx(1)
+    tdtdx_y = tdtdx(2)
+    tdtdx_z = tdtdx(3)
+
     ! update phi on x faces by adding in y-transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k=lo(3)-1, hi(3)+1
        do    j=lo(2)  , hi(2)
           do i=lo(1)  , hi(1)+1
 
              if (umac(i,j,k) .lt. 0.d0) then
                 phix_y(i,j,k) = phix(i,j,k) &
-                     - tdtdx(2) * (0.5d0*(vmac(i  ,j+1,k)+vmac(i  ,j,k)) * (phiy(i  ,j+1,k)-phiy(i  ,j,k)) )
+                     - tdtdx_y * (0.5d0*(vmac(i  ,j+1,k)+vmac(i  ,j,k)) * (phiy(i  ,j+1,k)-phiy(i  ,j,k)) )
              else
                 phix_y(i,j,k) = phix(i,j,k) &
-                     - tdtdx(2) * (0.5d0*(vmac(i-1,j+1,k)+vmac(i-1,j,k)) * (phiy(i-1,j+1,k)-phiy(i-1,j,k)) )
+                     - tdtdx_y * (0.5d0*(vmac(i-1,j+1,k)+vmac(i-1,j,k)) * (phiy(i-1,j+1,k)-phiy(i-1,j,k)) )
              end if
 
           end do
@@ -127,16 +168,17 @@ contains
     end do
 
     ! update phi on x faces by adding in z-transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k=lo(3)  , hi(3)
        do    j=lo(2)-1, hi(2)+1
           do i=lo(1)  , hi(1)+1
 
              if (umac(i,j,k) .lt. 0.d0) then
                 phix_z(i,j,k) = phix(i,j,k) &
-                     - tdtdx(3) * (0.5d0*(wmac(i  ,j,k+1)+wmac(i  ,j,k)) * (phiz(i  ,j,k+1)-phiz(i  ,j,k)) )
+                     - tdtdx_z * (0.5d0*(wmac(i  ,j,k+1)+wmac(i  ,j,k)) * (phiz(i  ,j,k+1)-phiz(i  ,j,k)) )
              else
                 phix_z(i,j,k) = phix(i,j,k) &
-                     - tdtdx(3) * (0.5d0*(wmac(i-1,j,k+1)+wmac(i-1,j,k)) * (phiz(i-1,j,k+1)-phiz(i-1,j,k)) )
+                     - tdtdx_z * (0.5d0*(wmac(i-1,j,k+1)+wmac(i-1,j,k)) * (phiz(i-1,j,k+1)-phiz(i-1,j,k)) )
              end if
 
           end do
@@ -144,16 +186,17 @@ contains
     end do
 
     ! update phi on y faces by adding in x-transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k = lo(3)-1, hi(3)+1
        do    j = lo(2)  , hi(2)+1
           do i = lo(1)  , hi(1)
 
              if (vmac(i,j,k) .lt. 0.d0) then
                 phiy_x(i,j,k) = phiy(i,j,k) &
-                     - tdtdx(1) * (0.5d0*(umac(i+1,j  ,k)+umac(i,j  ,k)) * (phix(i+1,j  ,k)-phix(i,j  ,k)) )
+                     - tdtdx_x * (0.5d0*(umac(i+1,j  ,k)+umac(i,j  ,k)) * (phix(i+1,j  ,k)-phix(i,j  ,k)) )
              else
                 phiy_x(i,j,k) = phiy(i,j,k) &
-                     - tdtdx(1) * (0.5d0*(umac(i+1,j-1,k)+umac(i,j-1,k)) * (phix(i+1,j-1,k)-phix(i,j-1,k)) )
+                     - tdtdx_x * (0.5d0*(umac(i+1,j-1,k)+umac(i,j-1,k)) * (phix(i+1,j-1,k)-phix(i,j-1,k)) )
              end if
 
           end do
@@ -161,16 +204,17 @@ contains
     end do
 
     ! update phi on y faces by adding in z-transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k = lo(3)  , hi(3)
        do    j = lo(2)  , hi(2)+1
           do i = lo(1)-1, hi(1)+1
 
              if (vmac(i,j,k) .lt. 0.d0) then
                 phiy_z(i,j,k) = phiy(i,j,k) &
-                     - tdtdx(3) * (0.5d0*(wmac(i,j  ,k+1)+wmac(i,j  ,k)) * (phiz(i,j  ,k+1)-phiz(i,j  ,k)) )
+                     - tdtdx_z * (0.5d0*(wmac(i,j  ,k+1)+wmac(i,j  ,k)) * (phiz(i,j  ,k+1)-phiz(i,j  ,k)) )
              else
                 phiy_z(i,j,k) = phiy(i,j,k) &
-                     - tdtdx(3) * (0.5d0*(wmac(i,j-1,k+1)+wmac(i,j-1,k)) * (phiz(i,j-1,k+1)-phiz(i,j-1,k)) )
+                     - tdtdx_z * (0.5d0*(wmac(i,j-1,k+1)+wmac(i,j-1,k)) * (phiz(i,j-1,k+1)-phiz(i,j-1,k)) )
              end if
 
           end do
@@ -178,16 +222,17 @@ contains
     end do
 
     ! update phi on z faces by adding in x-transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k = lo(3)  , hi(3)+1
        do    j = lo(2)-1, hi(2)+1
           do i = lo(1)  , hi(1)
 
              if (wmac(i,j,k) .lt. 0.d0) then
                 phiz_x(i,j,k) = phiz(i,j,k) &
-                     - tdtdx(1) * (0.5d0*(umac(i+1,j,k  )+umac(i,j,k  )) * (phix(i+1,j,k  )-phix(i,j,k  )) )
+                     - tdtdx_x * (0.5d0*(umac(i+1,j,k  )+umac(i,j,k  )) * (phix(i+1,j,k  )-phix(i,j,k  )) )
              else
                 phiz_x(i,j,k) = phiz(i,j,k) &
-                     - tdtdx(1) * (0.5d0*(umac(i+1,j,k-1)+umac(i,j,k-1)) * (phix(i+1,j,k-1)-phix(i,j,k-1)) )
+                     - tdtdx_x * (0.5d0*(umac(i+1,j,k-1)+umac(i,j,k-1)) * (phix(i+1,j,k-1)-phix(i,j,k-1)) )
              end if
 
           end do
@@ -195,16 +240,17 @@ contains
     end do
 
     ! update phi on z faces by adding in y-transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k = lo(3)  , hi(3)+1
        do    j = lo(2)  , hi(2)
           do i = lo(1)-1, hi(1)+1
 
              if (wmac(i,j,k) .lt. 0.d0) then
                 phiz_y(i,j,k) = phiz(i,j,k) &
-                     - tdtdx(2) * (0.5d0*(vmac(i,j+1,k  )+vmac(i,j,k  )) * (phiy(i,j+1,k  )-phiy(i,j,k  )) )
+                     - tdtdx_y * (0.5d0*(vmac(i,j+1,k  )+vmac(i,j,k  )) * (phiy(i,j+1,k  )-phiy(i,j,k  )) )
              else
                 phiz_y(i,j,k) = phiz(i,j,k) &
-                     - tdtdx(2) * (0.5d0*(vmac(i,j+1,k-1)+vmac(i,j,k-1)) * (phiy(i,j+1,k-1)-phiy(i,j,k-1)) )
+                     - tdtdx_y * (0.5d0*(vmac(i,j+1,k-1)+vmac(i,j,k-1)) * (phiy(i,j+1,k-1)-phiy(i,j,k-1)) )
              end if
 
           end do
@@ -216,18 +262,19 @@ contains
     !!!!!!!!!!!!!!!!!!!!
 
     ! update phi on x faces by adding in yz and zy transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k = lo(3), hi(3)
        do    j = lo(2), hi(2)
           do i = lo(1), hi(1)+1
 
              if (umac(i,j,k) .lt. 0.d0) then
                 phix(i,j,k) = phix(i,j,k) &
-                     - hdtdx(2)*( 0.5d0*(vmac(i  ,j+1,k  )+vmac(i  ,j,k)) * (phiy_z(i  ,j+1,k  )-phiy_z(i  ,j,k)) ) &
-                     - hdtdx(3)*( 0.5d0*(wmac(i  ,j  ,k+1)+wmac(i  ,j,k)) * (phiz_y(i  ,j  ,k+1)-phiz_y(i  ,j,k)) )
+                     - hdtdx_y*( 0.5d0*(vmac(i  ,j+1,k  )+vmac(i  ,j,k)) * (phiy_z(i  ,j+1,k  )-phiy_z(i  ,j,k)) ) &
+                     - hdtdx_z*( 0.5d0*(wmac(i  ,j  ,k+1)+wmac(i  ,j,k)) * (phiz_y(i  ,j  ,k+1)-phiz_y(i  ,j,k)) )
              else
                 phix(i,j,k) = phix(i,j,k) &
-                     - hdtdx(2)*( 0.5d0*(vmac(i-1,j+1,k  )+vmac(i-1,j,k)) * (phiy_z(i-1,j+1,k  )-phiy_z(i-1,j,k)) ) &
-                     - hdtdx(3)*( 0.5d0*(wmac(i-1,j  ,k+1)+wmac(i-1,j,k)) * (phiz_y(i-1,j  ,k+1)-phiz_y(i-1,j,k)) )
+                     - hdtdx_y*( 0.5d0*(vmac(i-1,j+1,k  )+vmac(i-1,j,k)) * (phiy_z(i-1,j+1,k  )-phiy_z(i-1,j,k)) ) &
+                     - hdtdx_z*( 0.5d0*(wmac(i-1,j  ,k+1)+wmac(i-1,j,k)) * (phiz_y(i-1,j  ,k+1)-phiz_y(i-1,j,k)) )
              end if
 
              ! compute final x-fluxes
@@ -238,18 +285,19 @@ contains
     end do
 
     ! update phi on y faces by adding in xz and zx transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k = lo(3), hi(3)
        do    j = lo(2), hi(2)+1
           do i = lo(1), hi(1)
 
              if (vmac(i,j,k) .lt. 0.d0) then
                 phiy(i,j,k) = phiy(i,j,k) &
-                     - hdtdx(1)*( 0.5d0*(umac(i+1,j  ,k  )+umac(i,j  ,k)) * (phix_z(i+1,j  ,k  )-phix_z(i,j  ,k)) ) &
-                     - hdtdx(3)*( 0.5d0*(wmac(i  ,j  ,k+1)+wmac(i,j  ,k)) * (phiz_x(i  ,j  ,k+1)-phiz_x(i,j  ,k)) )
+                     - hdtdx_x*( 0.5d0*(umac(i+1,j  ,k  )+umac(i,j  ,k)) * (phix_z(i+1,j  ,k  )-phix_z(i,j  ,k)) ) &
+                     - hdtdx_z*( 0.5d0*(wmac(i  ,j  ,k+1)+wmac(i,j  ,k)) * (phiz_x(i  ,j  ,k+1)-phiz_x(i,j  ,k)) )
              else
                 phiy(i,j,k) = phiy(i,j,k) &
-                     - hdtdx(1)*( 0.5d0*(umac(i+1,j-1,k  )+umac(i,j-1,k)) * (phix_z(i+1,j-1,k  )-phix_z(i,j-1,k)) ) &
-                     - hdtdx(3)*( 0.5d0*(wmac(i  ,j-1,k+1)+wmac(i,j-1,k)) * (phiz_x(i  ,j-1,k+1)-phiz_x(i,j-1,k)) )
+                     - hdtdx_x*( 0.5d0*(umac(i+1,j-1,k  )+umac(i,j-1,k)) * (phix_z(i+1,j-1,k  )-phix_z(i,j-1,k)) ) &
+                     - hdtdx_z*( 0.5d0*(wmac(i  ,j-1,k+1)+wmac(i,j-1,k)) * (phiz_x(i  ,j-1,k+1)-phiz_x(i,j-1,k)) )
              end if
 
              ! compute final y-fluxes
@@ -260,18 +308,19 @@ contains
     end do
 
     ! update phi on z faces by adding in xy and yx transverse terms
+    !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do       k = lo(3), hi(3)+1
        do    j = lo(2), hi(2)
           do i = lo(1), hi(1)
 
              if (wmac(i,j,k) .lt. 0.d0) then
                 phiz(i,j,k) = phiz(i,j,k) &
-                     - hdtdx(1)*( 0.5d0*(umac(i+1,j  ,k  )+umac(i  ,j,k)) * (phix_y(i+1,j  ,k  )-phix_y(i,j,k  )) ) &
-                     - hdtdx(2)*( 0.5d0*(vmac(i  ,j+1,k  )+vmac(i  ,j,k)) * (phiy_x(i  ,j+1,k  )-phiy_x(i,j,k  )) )
+                     - hdtdx_x*( 0.5d0*(umac(i+1,j  ,k  )+umac(i  ,j,k)) * (phix_y(i+1,j  ,k  )-phix_y(i,j,k  )) ) &
+                     - hdtdx_y*( 0.5d0*(vmac(i  ,j+1,k  )+vmac(i  ,j,k)) * (phiy_x(i  ,j+1,k  )-phiy_x(i,j,k  )) )
              else
                 phiz(i,j,k) = phiz(i,j,k) &
-                     - hdtdx(1)*( 0.5d0*(umac(i+1,j  ,k-1)+umac(i,j,k-1)) * (phix_y(i+1,j  ,k-1)-phix_y(i,j,k-1)) ) &
-                     - hdtdx(2)*( 0.5d0*(vmac(i  ,j+1,k-1)+vmac(i,j,k-1)) * (phiy_x(i  ,j+1,k-1)-phiy_x(i,j,k-1)) )
+                     - hdtdx_x*( 0.5d0*(umac(i+1,j  ,k-1)+umac(i,j,k-1)) * (phix_y(i+1,j  ,k-1)-phix_y(i,j,k-1)) ) &
+                     - hdtdx_y*( 0.5d0*(vmac(i  ,j+1,k-1)+vmac(i,j,k-1)) * (phiy_x(i  ,j+1,k-1)-phiy_x(i,j,k-1)) )
              end if
 
              ! compute final z-fluxes

@@ -80,7 +80,11 @@ contains
 
 #ifdef CUDA
   attributes(device) &
-  subroutine map_cuda_threads_to_space(lo, hi, i, j, has_work)
+  subroutine map_cuda_threads_to_space(lo, hi, i, j, &
+#if (AMREX_SPACEDIM == 3) 
+      k, &
+#endif
+      has_work)
 
     implicit none
 

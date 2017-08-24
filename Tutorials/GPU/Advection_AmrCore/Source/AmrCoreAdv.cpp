@@ -578,8 +578,9 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 #ifdef CUDA
             int idx = mfi.LocalIndex();
             statein.toDevice(idx);
-            uface[0].toDevice(idx);
-            uface[1].toDevice(idx);
+	    for (int d = 0; d < BL_SPACEDIM ; d++) {
+                uface[d].toDevice(idx);
+            }
             advect(time, bx.loVect(), bx.hiVect(),
 		   BL_TO_FORTRAN_3D_DEVICE(statein), 
 		   BL_TO_FORTRAN_3D_DEVICE(stateout),
@@ -591,8 +592,10 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 			  BL_TO_FORTRAN_3D_DEVICE(flux[2])), 
 		   dx, dt, idx, statein.deviceID());
             stateout.toHost(idx);
-            flux[0].toHost(idx);
-            flux[1].toHost(idx);
+	    for (int d = 0; d < BL_SPACEDIM ; d++) {
+                flux[d].toHost(idx);
+            }
+            gpu_synchronize();
 #else
             // compute new state (stateout) and fluxes.
             int idx = mfi.LocalIndex();
@@ -605,10 +608,9 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 		   AMREX_D_DECL(BL_TO_FORTRAN_3D(flux[0]), 
 			  BL_TO_FORTRAN_3D(flux[1]), 
 			  BL_TO_FORTRAN_3D(flux[2])), 
-		   dx, dt, idx, statein.deviceID());
+		   dx, dt);
 #endif
 
-            gpu_synchronize();
 	    if (do_reflux) {
 		for (int i = 0; i < BL_SPACEDIM ; i++) {
 		    fluxes[i][mfi].copy(flux[i],mfi.nodaltilebox(i));	  
