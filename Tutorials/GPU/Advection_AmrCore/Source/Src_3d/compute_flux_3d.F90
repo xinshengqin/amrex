@@ -52,15 +52,14 @@ contains
          
     integer :: i, j, k
     double precision :: hdtdx(3), tdtdx(3)
+    double precision :: hdtdx_x, hdtdx_y, hdtdx_z
+    double precision :: tdtdx_x, tdtdx_y, tdtdx_z
 #ifdef CUDA
     attributes(device) :: phi, umac, vmac, wmac, &
         flxx, flxy, flxz, &
         phix, phix_y, phix_z, phiy, phiy_x, phiy_z, phiz, phiz_x, phiz_y, slope
     ! device 
     integer, intent(in) :: idx, device_id
-    double precision :: hdtdx_x, hdtdx_y, hdtdx_z
-    double precision :: tdtdx_x, tdtdx_y, tdtdx_z
-    integer :: cudaResult
 #endif
 
     hdtdx = 0.5*(dt/dx)

@@ -49,9 +49,7 @@ subroutine advect_doit(time, lo, hi, &
   integer :: i, j, k
   integer :: glo(3), ghi(3)
   double precision :: dtdx(3), umax, vmax, wmax
-#ifdef CUDA
   double precision :: dtdx_x, dtdx_y, dtdx_z, dx_x, dx_y, dx_z
-#endif
 
 #ifdef CUDA
   integer, value, intent(in) :: idx, device_id
