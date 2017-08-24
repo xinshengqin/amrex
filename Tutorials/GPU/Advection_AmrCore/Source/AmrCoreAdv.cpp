@@ -55,6 +55,7 @@ AmrCoreAdv::~AmrCoreAdv ()
 void
 AmrCoreAdv::Evolve ()
 {
+    BL_PROFILE("AmrCoreAdv::Evolve()");
     Real cur_time = t_new[0];
     int last_plot_file_step = 0;
 
@@ -439,9 +440,11 @@ AmrCoreAdv::GetData (int lev, Real time, Array<MultiFab*>& data, Array<Real>& da
 void
 AmrCoreAdv::timeStep (int lev, Real time, int iteration)
 {
+    BL_PROFILE("AmrCoreAdv::timeStep()");
     if (regrid_int > 0)  // We may need to regrid
     {
 
+        BL_PROFILE("AmrCoreAdv::regrid()");
         // help keep track of whether a level was already regridded
         // from a coarser level call to regrid
         static Array<int> last_regrid_step(max_level+1, 0);
@@ -510,6 +513,7 @@ AmrCoreAdv::timeStep (int lev, Real time, int iteration)
 void
 AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 {
+    BL_PROFILE("AmrCoreAdv::Advance()"); 
     constexpr int num_grow = 3;
 
     std::swap(phi_old[lev], phi_new[lev]);
