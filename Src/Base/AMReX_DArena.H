@@ -1,0 +1,165 @@
+#ifndef BL_DARENA_H
+#define BL_DARENA_H
+
+#ifdef CUDA
+
+#include <cstddef>
+#include <set>
+#include <vector>
+
+#include <AMReX_Arena.H>
+#include <AMReX_Array.H>
+
+namespace amrex {
+
+/**
+* \brief A Concrete Class for Dynamic GPU Memory Management
+* This is a coalescing memory manager.  It allocates (possibly) large
+* chunks of heap space and apportions it out as requested.  It merges
+* together neighboring chunks on each free().
+*/
+
+class DArena
+    :
+    public Arena
+{
+public:
+    /**
+    * \brief Construct a coalescing memory manager.  hunk_size is the
+    * minimum size of hunks of memory to allocate from the heap.
+    * If hunk_size == 0 we use DefaultHunkSize as specified below.
+    */
+    DArena (size_t hunk_size = 0);
+    
+    //! The destructor.
+    virtual ~DArena () override;
+
+    //! Allocate some memory.
+    virtual void* alloc (size_t nbytes) override;
+
+    /**
+    * \brief Free up allocated memory.  Merge neighboring free memory chunks
+    * into largest possible chunk.
+    */
+    virtual void free (void* ap) override;
+
+    virtual void* alloc_device (size_t nbytes, int device_id = 0) override;
+#ifdef CUDA_ARRAY
+    /*
+     * do nothing for now
+     */ 
+    virtual void* alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize, int device_id = 0) override { void* pt = 0; return pt;};
+#endif
+    virtual void free_device (void* ap) override;
+
+    //! The current amount of heap space used by the DArena object.
+    size_t heap_space_used () const;
+
+    //! The default memory hunk size to grab from the heap.
+    enum { DefaultHunkSize = 1024*1024*512};
+
+    /**
+    * \brief Given a minimum required arena size of sz bytes, this returns
+    * the next largest arena size that will align to align_size bytes
+    * Override align in Arena to use the align_size overridden in this class
+    */
+    static std::size_t align (std::size_t sz);
+
+protected:
+    //! The nodes in our free list and block list.
+    class Node
+    {
+    public:
+        //! The default constructor.
+        Node ()
+            :
+            m_block(0), m_size(0) {}
+        
+        //! Another constructor.
+        Node (void* block, size_t size)
+            :
+            m_block(block), m_size(size) {}
+
+        //! The copy constructor.
+        Node (const Node& rhs)
+            :
+            m_block(rhs.m_block), m_size(rhs.m_size) {}
+
+        //! The copy assignment constructor.
+        Node& operator= (const Node& rhs)
+        {
+            m_block = rhs.m_block;
+            m_size  = rhs.m_size;
+            return *this;
+        }
+
+        //! The "less-than" operator.
+        bool operator< (const Node& rhs) const
+        {
+            return m_block < rhs.m_block;
+        }
+
+        //! The equality operator. 
+        bool operator== (const Node& rhs) const
+        {
+            return m_block == rhs.m_block;
+        }
+
+        //! The block address.
+        void* block () const { return m_block; }
+
+        //! Set block address.
+        void block (void* blk) { m_block = blk; }
+
+        //! The size of the memory block.
+        size_t size () const { return m_size; }
+
+        //! Set size.
+        void size (size_t sz) { m_size = sz; }
+
+
+    private:
+        //! The block of memory we reference.
+        void* m_block;
+        //! The size of the block we represent.
+        size_t m_size;
+    };
+
+    /**
+    * \brief The type of our freelist and blocklist.
+    * We use a set sorted from lo to hi memory addresses.
+    */
+    typedef std::set<Node> NL;
+
+    //! The list of blocks allocated via ::operator new().
+    std::vector<void*> m_alloc;
+
+    /**
+    * \brief The free list of allocated but not currently used blocks.
+    * Maintained in lo to hi memory sorted order.
+    */
+    NL m_freelist;
+
+    /**
+    * \brief The list of busy blocks.
+    * A block is either on the freelist or on the blocklist, but not on both.
+    */
+    NL m_busylist;
+    //! The minimal size of hunks to request via ::operator new().
+    size_t m_hunk;
+    //! The amount of heap space currently allocated.
+    size_t m_used;
+
+    //! overwrite align_size for GPU memory performance
+    static const unsigned int align_size = 256;
+
+private:
+    //! Disallowed.
+    DArena (const DArena& rhs);
+    DArena& operator= (const DArena& rhs);
+};
+
+}
+
+#endif // CUDA
+#endif /*BL_DARENA_H*/

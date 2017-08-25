@@ -2,8 +2,6 @@ module slope_module
 #ifdef CUDA
   use cuda_module, only: threads_and_blocks, stream_from_index
   use cuda_module, only: numThreads, numBlocks, cuda_streams 
-#else
-  use mempool_module, only : bl_allocate, bl_deallocate
 #endif
  
   implicit none
@@ -23,7 +21,11 @@ contains
                     , idx, device_id &
 #endif
                     )
-
+#ifdef CUDA
+    use mempool_module, only : gpu_allocate, gpu_deallocate
+#else
+    use mempool_module, only : bl_allocate, bl_deallocate
+#endif
     implicit none
 
     integer, intent(in) :: lo(3), hi(3), qlo(3), qhi(3), dqlo(3), dqhi(3)
@@ -36,22 +38,21 @@ contains
 
 #ifdef CUDA
     attributes(device) :: q, dq
-    ! attributes(device) :: dsgn, dlim, df, dcen
     integer, intent(in) :: idx, device_id
 #endif
 
 #ifdef CUDA
-    double precision, device, allocatable :: dsgn(:,:,:), dlim(:,:,:), df(:,:,:), dcen(:,:,:)
+    double precision, dimension(:,:,:), pointer, contiguous, device :: dsgn, dlim, df, dcen
 #else
     ! Some compiler may not support 'contiguous'.  Remove it in that case.
     double precision, dimension(:,:,:), pointer, contiguous :: dsgn, dlim, df, dcen
 #endif
 
 #ifdef CUDA
-    allocate(dsgn  (lo(1)-1: hi(1)+1, lo(2): hi(2), lo(3): hi(3)) )
-    allocate(dlim  (lo(1)-1: hi(1)+1, lo(2): hi(2), lo(3): hi(3)) )
-    allocate(df    (lo(1)-1: hi(1)+1, lo(2): hi(2), lo(3): hi(3)) )
-    allocate(dcen  (lo(1)-1: hi(1)+1, lo(2): hi(2), lo(3): hi(3)) )
+    call gpu_allocate(dsgn  ,lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
+    call gpu_allocate(dlim  ,lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
+    call gpu_allocate(df    ,lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
+    call gpu_allocate(dcen  ,lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
 #else
     call bl_allocate(dsgn, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3))
     call bl_allocate(dlim, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3))
@@ -59,6 +60,7 @@ contains
     call bl_allocate(dcen, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3))
 #endif
 
+    ! TODO: move below to slopex_doit to remove pointerness of dsgn, dlim, df, dcen
     !$cuf kernel do(3) <<<*, (8,8,4), 0, cuda_streams(stream_from_index(idx),device_id)>>> 
     do    k = lo(3), hi(3)
        do j = lo(2), hi(2)
@@ -88,10 +90,10 @@ contains
     end do
 
 #ifdef CUDA
-    deallocate(dsgn)
-    deallocate(dlim)
-    deallocate(df)
-    deallocate(dcen)
+    call gpu_deallocate(dsgn)
+    call gpu_deallocate(dlim)
+    call gpu_deallocate(df)
+    call gpu_deallocate(dcen)
 #else
     call bl_deallocate(dsgn)
     call bl_deallocate(dlim)
@@ -110,7 +112,9 @@ contains
 #endif
                     )
 
-#ifndef CUDA
+#ifdef CUDA
+    use mempool_module, only : gpu_allocate, gpu_deallocate
+#else
     use mempool_module, only : bl_allocate, bl_deallocate
 #endif
 
@@ -124,17 +128,18 @@ contains
 #endif
 
 #ifdef CUDA
-    double precision, device, allocatable :: dsgn(:,:,:), dlim(:,:,:), df(:,:,:), dcen(:,:,:)
+    double precision, dimension(:,:,:), pointer, contiguous, device :: dsgn, dlim, df, dcen
 #else
     ! Some compiler may not support 'contiguous'.  Remove it in that case.
     double precision, dimension(:,:,:), pointer, contiguous :: dsgn, dlim, df, dcen
 #endif
 
 #ifdef CUDA
-    allocate(dsgn  (lo(1): hi(1), lo(2)-1: hi(2)+1, lo(3):hi(3)) )
-    allocate(dlim  (lo(1): hi(1), lo(2)-1: hi(2)+1, lo(3):hi(3)) )
-    allocate(df    (lo(1): hi(1), lo(2)-1: hi(2)+1, lo(3):hi(3)) )
-    allocate(dcen  (lo(1): hi(1), lo(2)-1: hi(2)+1, lo(3):hi(3)) )
+    call gpu_allocate(dsgn, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+    call gpu_allocate(dlim, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+    call gpu_allocate(df  , lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+    call gpu_allocate(dcen, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+
 #else
     call bl_allocate(dsgn, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
     call bl_allocate(dlim, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
@@ -152,10 +157,10 @@ contains
                      )
 
 #ifdef CUDA
-    deallocate(dsgn)
-    deallocate(dlim)
-    deallocate(df)
-    deallocate(dcen)
+    call gpu_deallocate(dsgn)
+    call gpu_deallocate(dlim)
+    call gpu_deallocate(df)
+    call gpu_deallocate(dcen)
 #else
     call bl_deallocate(dsgn)
     call bl_deallocate(dlim)
@@ -229,7 +234,9 @@ contains
 #endif
                     )
 
-#ifndef CUDA
+#ifdef CUDA
+    use mempool_module, only : gpu_allocate, gpu_deallocate
+#else
     use mempool_module, only : bl_allocate, bl_deallocate
 #endif
 
@@ -243,7 +250,7 @@ contains
 #endif
 
 #ifdef CUDA
-    double precision, device, allocatable :: dsgn(:,:,:), dlim(:,:,:), df(:,:,:), dcen(:,:,:)
+    double precision, dimension(:,:,:), pointer, contiguous, device :: dsgn, dlim, df, dcen
 #else
 
     ! Some compiler may not support 'contiguous'.  Remove it in that case.
@@ -251,10 +258,10 @@ contains
 #endif
 
 #ifdef CUDA
-    allocate(dsgn  (lo(1): hi(1), lo(2): hi(2), lo(3)-1: hi(3)+1) )
-    allocate(dlim  (lo(1): hi(1), lo(2): hi(2), lo(3)-1: hi(3)+1) )
-    allocate(df    (lo(1): hi(1), lo(2): hi(2), lo(3)-1: hi(3)+1) )
-    allocate(dcen  (lo(1): hi(1), lo(2): hi(2), lo(3)-1: hi(3)+1) )
+    call gpu_allocate(dsgn  ,lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
+    call gpu_allocate(dlim  ,lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
+    call gpu_allocate(df    ,lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
+    call gpu_allocate(dcen  ,lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
 #else
     call bl_allocate(dsgn, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
     call bl_allocate(dlim, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
@@ -273,10 +280,10 @@ contains
                      )
 
 #ifdef CUDA
-    deallocate(dsgn)
-    deallocate(dlim)
-    deallocate(df)
-    deallocate(dcen)
+    call gpu_deallocate(dsgn)
+    call gpu_deallocate(dlim)
+    call gpu_deallocate(df)
+    call gpu_deallocate(dcen)
 #else
     call bl_deallocate(dsgn)
     call bl_deallocate(dlim)

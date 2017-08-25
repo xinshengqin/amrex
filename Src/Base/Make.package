@@ -20,6 +20,9 @@ C$(AMREX_BASE)_headers += AMReX_DistributionMapping.H AMReX_ParallelDescriptor.H
 C$(AMREX_BASE)_sources += AMReX_VisMF.cpp AMReX_Arena.cpp AMReX_BArena.cpp AMReX_CArena.cpp
 C$(AMREX_BASE)_headers += AMReX_VisMF.H AMReX_Arena.H AMReX_BArena.H AMReX_CArena.H
 
+C$(AMREX_BASE)_sources += AMReX_VisMF.cpp AMReX_Arena.cpp AMReX_BArena.cpp AMReX_DArena.cpp
+C$(AMREX_BASE)_headers += AMReX_VisMF.H AMReX_Arena.H AMReX_BArena.H AMReX_DArena.H
+
 C$(AMREX_BASE)_headers += AMReX_BLProfiler.H
 
 C$(AMREX_BASE)_headers += AMReX_BLBackTrace.H
@@ -160,7 +163,7 @@ endif
 C$(AMREX_BASE)_headers += AMReX_MemPool.H
 C$(AMREX_BASE)_sources += AMReX_MemPool.cpp
 ifneq ($(BL_NO_FORT),TRUE)
-  f90$(AMREX_BASE)_sources += AMReX_mempool_f.f90
+  F90$(AMREX_BASE)_sources += AMReX_mempool_f.F90
 endif
 
 # UPCXX

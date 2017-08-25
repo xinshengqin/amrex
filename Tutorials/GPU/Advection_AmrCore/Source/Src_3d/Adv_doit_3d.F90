@@ -20,7 +20,9 @@ subroutine advect_doit(time, lo, hi, &
 #endif
                 )
   
-#ifndef CUDA
+#ifdef CUDA
+  use mempool_module, only : gpu_allocate, gpu_deallocate
+#else
   use mempool_module, only : bl_allocate, bl_deallocate
 #endif
   use compute_flux_module, only : compute_flux_3d
@@ -57,8 +59,8 @@ subroutine advect_doit(time, lo, hi, &
 #endif
 
 #ifdef CUDA
-  double precision, device, allocatable :: &
-       phix(:,:,:), phix_y(:,:,:), phix_z(:,:,:), phiy(:,:,:), phiy_x(:,:,:), phiy_z(:,:,:), phiz(:,:,:), phiz_x(:,:,:), phiz_y(:,:,:), slope(:,:,:)
+  double precision, dimension(:,:,:), pointer, contiguous, device :: &
+       phix, phix_y, phix_z, phiy, phiy_x, phiy_z, phiz, phiz_x, phiz_y, slope
 #else
   ! Some compiler may not support 'contiguous'.  Remove it in that case.
   double precision, dimension(:,:,:), pointer, contiguous :: &
@@ -72,17 +74,16 @@ subroutine advect_doit(time, lo, hi, &
   ghi = hi + 1
 
 #ifdef CUDA
-  allocate(phix  (glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
-  allocate(phix_y(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
-  allocate(phix_z(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
-  allocate(phiy  (glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
-  allocate(phiy_x(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
-  allocate(phiy_z(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
-  allocate(phiz  (glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
-  allocate(phiz_x(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
-  allocate(phiz_y(glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )
-  
-  allocate(slope (glo(1): ghi(1), glo(2): ghi(2), glo(3): ghi(3)) )  
+  call gpu_allocate(phix  ,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phix_y,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phix_z,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiy  ,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiy_x,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiy_z,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiz  ,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiz_x,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiz_y,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(slope ,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))  
 #else
   ! edge states
   call bl_allocate(phix  ,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
@@ -183,16 +184,16 @@ subroutine advect_doit(time, lo, hi, &
   enddo
 
 #ifdef CUDA
-  deallocate(phix  )
-  deallocate(phix_y)
-  deallocate(phix_z)
-  deallocate(phiy  )
-  deallocate(phiy_x)
-  deallocate(phiy_z)
-  deallocate(phiz  )
-  deallocate(phiz_x)
-  deallocate(phiz_y)
-  deallocate(slope)
+  call gpu_deallocate(phix  )
+  call gpu_deallocate(phix_y)
+  call gpu_deallocate(phix_z)
+  call gpu_deallocate(phiy  )
+  call gpu_deallocate(phiy_x)
+  call gpu_deallocate(phiy_z)
+  call gpu_deallocate(phiz  )
+  call gpu_deallocate(phiz_x)
+  call gpu_deallocate(phiz_y)
+  call gpu_deallocate(slope)
 #else
   call bl_deallocate(phix  )
   call bl_deallocate(phix_y)

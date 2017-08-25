@@ -10,7 +10,13 @@
 #include <cstring>
 #include <cstdint>
 
+#include <AMReX_ParallelDescriptor.H>
 #include <AMReX_CArena.H>
+#ifdef CUDA
+#include <AMReX_DArena.H>
+#include <AMReX_CUDA_helper.H>
+#include <cuda_runtime_api.h>
+#endif
 #include <AMReX_MemPool.H>
 
 #ifdef BL_MEM_PROFILING
@@ -26,6 +32,10 @@ using namespace amrex;
 namespace
 {
     static Array<std::unique_ptr<CArena> > the_memory_pool;
+#ifdef CUDA
+    // in the future we can have multiple devices so we need multiple DArenas
+    static Array<std::unique_ptr<DArena> > device_memory_pool;
+#endif
 #if defined(BL_TESTING) || defined(DEBUG)
     static int init_snan = 1;
 #else
@@ -75,6 +85,17 @@ void amrex_mempool_init()
 			     return {b, b};
 			 }));
 #endif
+#ifdef CUDA
+        int num_devices = ParallelDescriptor::get_num_devices_used();
+	device_memory_pool.resize(num_devices);
+	for (int i=0; i<num_devices; ++i) {
+	    device_memory_pool[i].reset(new DArena);
+	}
+        size_t N = 64*1024*1024*sizeof(double);
+        void *p = amrex_mempool_alloc_gpu(N);
+        checkCudaErrors(cudaMemset(p, 0, N));
+        amrex_mempool_free_gpu(p);
+#endif
     }
 }
 
@@ -88,6 +109,7 @@ void* amrex_mempool_alloc (size_t nbytes)
   return the_memory_pool[tid]->alloc(nbytes);
 }
 
+
 void amrex_mempool_free (void* p) 
 {
 #ifdef _OPENMP
@@ -97,6 +119,21 @@ void amrex_mempool_free (void* p)
 #endif
   the_memory_pool[tid]->free(p);
 }
+
+#ifdef CUDA
+void* amrex_mempool_alloc_gpu (size_t nbytes)
+{
+
+    // for now assume we have only one device so one DArena
+    return device_memory_pool[0]->alloc(nbytes);
+}
+
+void amrex_mempool_free_gpu (void* p) 
+{
+    // for now assume we have only one device so one DArena
+    device_memory_pool[0]->free(p);
+}
+#endif
 
 void amrex_mempool_get_stats (int& mp_min, int& mp_max, int& mp_tot) // min, max & tot in MB
 {

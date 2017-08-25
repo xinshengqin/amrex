@@ -68,6 +68,34 @@ module mempool_module
      module procedure bl_deallocate_i3
   end interface
 
+#ifdef CUDA
+
+  interface gpu_allocate
+     module procedure gpu_allocate_r3
+  end interface
+
+  interface gpu_deallocate
+     module procedure gpu_deallocate_r3
+  end interface
+
+  interface 
+     function amrex_mempool_alloc_gpu (nbytes) result(p) bind(c)
+       use cudafor
+       use, intrinsic :: iso_c_binding
+       type(c_devptr) :: p
+       integer(kind=c_size_t), intent(in), value :: nbytes
+     end function amrex_mempool_alloc_gpu
+     
+     subroutine amrex_mempool_free_gpu (p) bind(c)
+       use cudafor
+       use, intrinsic :: iso_c_binding
+       type(c_devptr), value :: p
+     end subroutine amrex_mempool_free_gpu
+
+  end interface
+
+#endif
+
   interface 
      function amrex_mempool_alloc (nbytes) result(p) bind(c)
        use, intrinsic :: iso_c_binding
@@ -539,5 +567,56 @@ contains
     call amrex_mempool_free(cp)
     a => Null()
   end subroutine bl_deallocate_i3
+
+#ifdef CUDA
+  subroutine gpu_allocate_r3(a, lo1, hi1, lo2, hi2, lo3, hi3)
+    use cudafor
+    real(c_real), pointer, device, intent(inout) :: a(:,:,:)
+    ! double precision, dimension(:,:,:), allocatable, device, intent(inout) :: a
+    integer, intent(in) :: lo1, hi1, lo2, hi2, lo3, hi3
+    integer :: n1, n2, n3
+    integer (kind=c_size_t) :: sz
+    type(c_devptr) :: cp
+    real(c_real), pointer, device :: fp(:,:,:)
+    n1 = max(hi1-lo1+1, 1)
+    n2 = max(hi2-lo2+1, 1)
+    n3 = max(hi3-lo3+1, 1)
+    sz = int(n1,c_size_t) * int(n2,c_size_t) * int(n3,c_size_t)
+    cp = amrex_mempool_alloc_gpu(szr*sz)
+    ! call amrex_real_array_init(cp, sz)
+    call c_f_pointer(cp, fp, shape=(/n1,n2,n3/))
+    call shift_bound_d3(fp, lo1, lo2, lo3, a)
+    contains
+      subroutine shift_bound_d3(fp, lo1, lo2, lo3, a)
+        integer, intent(in) :: lo1, lo2, lo3
+        real(c_real), target,  device, intent(in) :: fp(lo1:,lo2:,lo3:)
+        real(c_real), pointer, device, intent(inout) :: a(:,:,:)
+        ! double precision, dimension(:,:,:), allocatable, device, intent(inout) :: a
+        a => fp
+      end subroutine shift_bound_d3
+  ! double precision, dimension(:,:,:), allocatable, device, intent(inout) :: a
+    ! integer, intent(in) :: lo1, hi1, lo2, hi2, lo3, hi3
+    ! integer :: n1, n2, n3
+    ! integer (kind=c_size_t) :: sz
+    ! type(c_devptr), device :: cp
+    ! n1 = max(hi1-lo1+1, 1)
+    ! n2 = max(hi2-lo2+1, 1)
+    ! n3 = max(hi3-lo3+1, 1)
+    ! sz = int(n1,c_size_t) * int(n2,c_size_t) * int(n3,c_size_t)
+    ! cp = amrex_mempool_alloc_gpu(szr*sz)
+    ! call c_f_pointer(cp, a, (/n1,n2,n3/))
+  end subroutine gpu_allocate_r3
+
+  subroutine gpu_deallocate_r3(a)
+    use cudafor
+    real(c_real), pointer, device, intent(inout) :: a(:,:,:)
+    integer :: lo(3)
+    type(c_devptr) :: cp
+    lo = lbound(a)
+    cp = c_devloc(a(lo(1),lo(2),lo(3)))
+    call amrex_mempool_free_gpu(cp)
+    a => Null()
+  end subroutine gpu_deallocate_r3
+#endif
 
 end module mempool_module
