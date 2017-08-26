@@ -74,16 +74,16 @@ subroutine advect_doit(time, lo, hi, &
   ghi = hi + 1
 
 #ifdef CUDA
-  call gpu_allocate(phix  ,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
-  call gpu_allocate(phix_y,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
-  call gpu_allocate(phix_z,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
-  call gpu_allocate(phiy  ,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
-  call gpu_allocate(phiy_x,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
-  call gpu_allocate(phiy_z,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
-  call gpu_allocate(phiz  ,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
-  call gpu_allocate(phiz_x,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
-  call gpu_allocate(phiz_y,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
-  call gpu_allocate(slope ,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))  
+  call gpu_allocate(phix  , device_id, glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phix_y, device_id, glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phix_z, device_id, glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiy  , device_id, glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiy_x, device_id, glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiy_z, device_id, glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiz  , device_id, glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiz_x, device_id, glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(phiz_y, device_id, glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
+  call gpu_allocate(slope , device_id, glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))  
 #else
   ! edge states
   call bl_allocate(phix  ,glo(1), ghi(1), glo(2), ghi(2), glo(3), ghi(3))
@@ -184,16 +184,16 @@ subroutine advect_doit(time, lo, hi, &
   enddo
 
 #ifdef CUDA
-  call gpu_deallocate(phix  )
-  call gpu_deallocate(phix_y)
-  call gpu_deallocate(phix_z)
-  call gpu_deallocate(phiy  )
-  call gpu_deallocate(phiy_x)
-  call gpu_deallocate(phiy_z)
-  call gpu_deallocate(phiz  )
-  call gpu_deallocate(phiz_x)
-  call gpu_deallocate(phiz_y)
-  call gpu_deallocate(slope)
+  call gpu_deallocate(phix  , device_id)
+  call gpu_deallocate(phix_y, device_id)
+  call gpu_deallocate(phix_z, device_id)
+  call gpu_deallocate(phiy  , device_id)
+  call gpu_deallocate(phiy_x, device_id)
+  call gpu_deallocate(phiy_z, device_id)
+  call gpu_deallocate(phiz  , device_id)
+  call gpu_deallocate(phiz_x, device_id)
+  call gpu_deallocate(phiz_y, device_id)
+  call gpu_deallocate(slope , device_id)
 #else
   call bl_deallocate(phix  )
   call bl_deallocate(phix_y)
@@ -204,7 +204,7 @@ subroutine advect_doit(time, lo, hi, &
   call bl_deallocate(phiz  )
   call bl_deallocate(phiz_x)
   call bl_deallocate(phiz_y)
-  call bl_deallocate(slope)
+  call bl_deallocate(slope )
 #endif
 
 end subroutine advect_doit

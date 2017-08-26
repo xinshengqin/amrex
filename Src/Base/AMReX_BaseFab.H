@@ -21,6 +21,7 @@
 #include <AMReX_BLProfiler.H>
 #include <AMReX_BoxIterator.H>
 #include <AMReX_MakeType.H>
+#include <AMReX_MemPool.H>
 #ifdef CUDA
 #include <cuda_runtime_api.h>
 #include <AMReX_CUDA_helper.H>
@@ -1480,7 +1481,8 @@ BaseFab<T>::allocate_device() {
 #ifdef CUDA_ARRAY
     dptr_d = static_cast<T*>(amrex::The_Arena()->alloc_device_2d(pitch, dlen[0]*sizeof(T), dlen[1], device_id));
 #else
-    dptr_d = static_cast<T*>(amrex::The_Arena()->alloc_device(truesize*sizeof(T), device_id));
+    // dptr_d = static_cast<T*>(amrex::The_Arena()->alloc_device(truesize*sizeof(T), device_id));
+    dptr_d = static_cast<T*>(amrex_mempool_alloc_gpu(truesize*sizeof(T), device_id));
 #endif
     // this->initialize_device();
 #endif
@@ -1526,7 +1528,8 @@ BaseFab<T>::clear ()
 
 	    if (dptr_d) {
                 BL_PROFILE_VAR("Free GPU memory in BaseFab<T>::clear()",free_gpu);
-		amrex::The_Arena()->free_device(dptr_d);
+		// amrex::The_Arena()->free_device(dptr_d);
+                amrex_mempool_free_gpu(dptr_d, device_id);
                 BL_PROFILE_VAR_STOP(free_gpu);
             }
 	    

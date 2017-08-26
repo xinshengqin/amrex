@@ -38,7 +38,7 @@ public:
     virtual void* alloc (size_t nbytes) override;
 
     virtual void* alloc_pinned (std::size_t sz) override { 
-        void* pt;
+        void* pt = 0;
         amrex::Abort("DArena::alloc_pinned() not implemented"); 
         return pt;
     }

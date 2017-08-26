@@ -49,10 +49,10 @@ contains
 #endif
 
 #ifdef CUDA
-    call gpu_allocate(dsgn  ,lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
-    call gpu_allocate(dlim  ,lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
-    call gpu_allocate(df    ,lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
-    call gpu_allocate(dcen  ,lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
+    call gpu_allocate(dsgn  , device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
+    call gpu_allocate(dlim  , device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
+    call gpu_allocate(df    , device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
+    call gpu_allocate(dcen  , device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
 #else
     call bl_allocate(dsgn, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3))
     call bl_allocate(dlim, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3))
@@ -90,10 +90,10 @@ contains
     end do
 
 #ifdef CUDA
-    call gpu_deallocate(dsgn)
-    call gpu_deallocate(dlim)
-    call gpu_deallocate(df)
-    call gpu_deallocate(dcen)
+    call gpu_deallocate(dsgn, device_id)
+    call gpu_deallocate(dlim, device_id)
+    call gpu_deallocate(df  , device_id)
+    call gpu_deallocate(dcen, device_id)
 #else
     call bl_deallocate(dsgn)
     call bl_deallocate(dlim)
@@ -135,10 +135,10 @@ contains
 #endif
 
 #ifdef CUDA
-    call gpu_allocate(dsgn, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
-    call gpu_allocate(dlim, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
-    call gpu_allocate(df  , lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
-    call gpu_allocate(dcen, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+    call gpu_allocate(dsgn, device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+    call gpu_allocate(dlim, device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+    call gpu_allocate(df  , device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+    call gpu_allocate(dcen, device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
 
 #else
     call bl_allocate(dsgn, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
@@ -157,10 +157,10 @@ contains
                      )
 
 #ifdef CUDA
-    call gpu_deallocate(dsgn)
-    call gpu_deallocate(dlim)
-    call gpu_deallocate(df)
-    call gpu_deallocate(dcen)
+    call gpu_deallocate(dsgn, device_id)
+    call gpu_deallocate(dlim, device_id)
+    call gpu_deallocate(df  , device_id)
+    call gpu_deallocate(dcen, device_id)
 #else
     call bl_deallocate(dsgn)
     call bl_deallocate(dlim)
@@ -258,10 +258,10 @@ contains
 #endif
 
 #ifdef CUDA
-    call gpu_allocate(dsgn  ,lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
-    call gpu_allocate(dlim  ,lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
-    call gpu_allocate(df    ,lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
-    call gpu_allocate(dcen  ,lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
+    call gpu_allocate(dsgn, device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
+    call gpu_allocate(dlim, device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
+    call gpu_allocate(df  , device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
+    call gpu_allocate(dcen, device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
 #else
     call bl_allocate(dsgn, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
     call bl_allocate(dlim, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
@@ -280,10 +280,10 @@ contains
                      )
 
 #ifdef CUDA
-    call gpu_deallocate(dsgn)
-    call gpu_deallocate(dlim)
-    call gpu_deallocate(df)
-    call gpu_deallocate(dcen)
+    call gpu_deallocate(dsgn, device_id)
+    call gpu_deallocate(dlim, device_id)
+    call gpu_deallocate(df  , device_id)
+    call gpu_deallocate(dcen, device_id)
 #else
     call bl_deallocate(dsgn)
     call bl_deallocate(dlim)

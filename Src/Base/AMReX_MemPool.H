@@ -6,8 +6,8 @@ extern "C" {
     void* amrex_mempool_alloc (size_t n);
     void  amrex_mempool_free (void* p);
 #ifdef CUDA
-    void* amrex_mempool_alloc_gpu (size_t n);
-    void  amrex_mempool_free_gpu (void* p);
+    void* amrex_mempool_alloc_gpu (size_t n, int dev_id);
+    void  amrex_mempool_free_gpu (void* p, int dev_id);
 #endif
     void  amrex_mempool_get_stats (int& mp_min, int& mp_max, int& mp_tot);  // min, max & tot in MB
     // We should eventually use amre_real instead of double.

@@ -91,10 +91,6 @@ void amrex_mempool_init()
 	for (int i=0; i<num_devices; ++i) {
 	    device_memory_pool[i].reset(new DArena);
 	}
-        size_t N = 64*1024*1024*sizeof(double);
-        void *p = amrex_mempool_alloc_gpu(N);
-        checkCudaErrors(cudaMemset(p, 0, N));
-        amrex_mempool_free_gpu(p);
 #endif
     }
 }
@@ -121,17 +117,19 @@ void amrex_mempool_free (void* p)
 }
 
 #ifdef CUDA
-void* amrex_mempool_alloc_gpu (size_t nbytes)
+void* amrex_mempool_alloc_gpu (size_t nbytes, int device_id)
 {
 
-    // for now assume we have only one device so one DArena
-    return device_memory_pool[0]->alloc(nbytes);
+    BL_ASSERT(device_id >= 0);
+    checkCudaErrors(cudaSetDevice(device_id));
+    return device_memory_pool[device_id]->alloc(nbytes);
 }
 
-void amrex_mempool_free_gpu (void* p) 
+void amrex_mempool_free_gpu (void* p, int device_id) 
 {
-    // for now assume we have only one device so one DArena
-    device_memory_pool[0]->free(p);
+    BL_ASSERT(device_id >= 0);
+    checkCudaErrors(cudaSetDevice(device_id));
+    device_memory_pool[device_id]->free(p);
 }
 #endif
 
