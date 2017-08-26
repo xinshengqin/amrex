@@ -37,7 +37,11 @@ public:
     explicit Mask (const Box& bx,
 		   int        nc = 1,
 		   bool       alloc=true,
-		   bool       shared=false);
+		   bool       shared=false
+#ifdef CUDA
+                   , bool pinned = false
+#endif
+                   );
     //
     // construct from input stream
     //

@@ -54,7 +54,14 @@ class DefaultFabFactory
 public:
     virtual FAB* create (const Box& box, int ncomps, const FabInfo& info, int box_index) const override
     {
-        FAB* fab = new FAB(box, ncomps, info.alloc, info.shared);
+        // if we need to allocate device memory, we allocate CPU memory as pinned memory
+        // otherwise we allocate CPU memory as regular memory
+        bool allocate_pinned = info.device;
+        FAB* fab = new FAB(box, ncomps, info.alloc, info.shared
+#ifdef CUDA
+                , allocate_pinned
+#endif
+                );
 #ifdef CUDA
 	if (info.device) {
             fab->setDevice(info.device_id);

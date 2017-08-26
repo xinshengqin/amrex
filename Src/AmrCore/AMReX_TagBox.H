@@ -40,7 +40,11 @@ public:
     //
     // Construct a TagBox on Box bx with number of components n.
     //
-    explicit TagBox (const Box& bx, int n = 1, bool alloc = true, bool shared = false);
+    explicit TagBox (const Box& bx, int n = 1, bool alloc = true, bool shared = false
+#ifdef CUDA
+                      , bool pinned = false
+#endif
+            );
 
     ~TagBox () = default;
     TagBox (TagBox&& rhs) noexcept = default;

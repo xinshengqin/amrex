@@ -28,9 +28,17 @@ IArrayBox::IArrayBox () {}
 IArrayBox::IArrayBox (const Box& b,
                       int        n,
 		      bool       alloc,
-		      bool       shared)
+		      bool       shared
+#ifdef CUDA
+                      , bool pinned
+#endif
+                      )
     :
-    BaseFab<int>(b,n,alloc,shared)
+    BaseFab<int>(b,n,alloc,shared
+#ifdef CUDA
+            ,pinned
+#endif
+            )
 {
     //
     // For debugging purposes set values to QNAN when possible.

@@ -35,11 +35,23 @@ public:
     //! Allocate some memory.
     virtual void* alloc (size_t nbytes) override;
 
+    virtual void* alloc_pinned (std::size_t sz) override { 
+        void* pt = 0;
+        amrex::Abort("CArena::alloc_pinned() not implemented"); 
+        return pt;
+    }
+
     /**
     * \brief Free up allocated memory.  Merge neighboring free memory chunks
     * into largest possible chunk.
     */
     virtual void free (void* ap) override;
+
+    /**
+    * \brief Free up allocated memory.  Merge neighboring free memory chunks
+    * into largest possible chunk.
+    */
+    virtual void free_pinned (void* ap) override { amrex::Abort("CArena::free_pinned() not implemented"); }
 
     virtual void* alloc_device (size_t nbytes, int device_id = 0) override;
 #ifdef CUDA_ARRAY

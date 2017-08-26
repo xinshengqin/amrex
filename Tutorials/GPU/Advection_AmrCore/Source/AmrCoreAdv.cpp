@@ -115,8 +115,15 @@ AmrCoreAdv::MakeNewLevelFromCoarse (int lev, Real time, const BoxArray& ba,
     const int ncomp = phi_new[lev-1]->nComp();
     const int nghost = phi_new[lev-1]->nGrow();
     
-    phi_new[lev].reset(new MultiFab(ba, dm, ncomp, nghost));
-    phi_old[lev].reset(new MultiFab(ba, dm, ncomp, nghost));
+    MFInfo mfinfo;
+#ifdef CUDA
+    mfinfo.SetDevice(true);
+#else
+    mfinfo.SetDevice(false);
+#endif
+    phi_new[lev].reset(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
+    phi_old[lev].reset(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
+
 
     t_new[lev] = time;
     t_old[lev] = time - 1.e200;
@@ -138,12 +145,18 @@ AmrCoreAdv::RemakeLevel (int lev, Real time, const BoxArray& ba,
     const int ncomp = phi_new[lev]->nComp();
     const int nghost = phi_new[lev]->nGrow();
 
-#if __cplusplus >= 201402L
-    auto new_state = std::make_unique<MultiFab>(ba, dm, ncomp, nghost);
-    auto old_state = std::make_unique<MultiFab>(ba, dm, ncomp, nghost);
+    MFInfo mfinfo;
+#ifdef CUDA
+    mfinfo.SetDevice(true);
 #else
-    std::unique_ptr<MultiFab> new_state(new MultiFab(ba, dm, ncomp, nghost));
-    std::unique_ptr<MultiFab> old_state(new MultiFab(ba, dm, ncomp, nghost));
+    mfinfo.SetDevice(false);
+#endif
+#if __cplusplus >= 201402L
+    auto new_state = std::make_unique<MultiFab>(ba, dm, ncomp, nghost, mfinfo);
+    auto old_state = std::make_unique<MultiFab>(ba, dm, ncomp, nghost, mfinfo);
+#else
+    std::unique_ptr<MultiFab> new_state(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
+    std::unique_ptr<MultiFab> old_state(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
 #endif
 
     FillPatch(lev, time, *new_state, 0, ncomp);
@@ -177,8 +190,14 @@ void AmrCoreAdv::MakeNewLevelFromScratch (int lev, Real time, const BoxArray& ba
     const int ncomp = 1;
     const int nghost = 0;
 
-    phi_new[lev].reset(new MultiFab(ba, dm, ncomp, nghost));
-    phi_old[lev].reset(new MultiFab(ba, dm, ncomp, nghost));
+    MFInfo mfinfo;
+#ifdef CUDA
+    mfinfo.SetDevice(true);
+#else
+    mfinfo.SetDevice(false);
+#endif
+    phi_new[lev].reset(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
+    phi_old[lev].reset(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
 
     t_new[lev] = time;
     t_old[lev] = time - 1.e200;
@@ -459,6 +478,9 @@ AmrCoreAdv::timeStep (int lev, Real time, int iteration)
                 // regrid could add newly refine levels (if finest_level < max_level)
                 // so we save the previous finest level index
 		int old_finest = finest_level; 
+                if (Verbose()) {
+                    amrex::Print() << "Regrid based on level: " << lev << std::endl;
+                }
 		regrid(lev, time);
 
                 // mark that we have regridded this level already
@@ -540,8 +562,14 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	}
     }
 
+    MFInfo mfinfo;
+#ifdef CUDA
+    mfinfo.SetDevice(true);
+#else
+    mfinfo.SetDevice(false);
+#endif
     // State with ghost cells
-    MultiFab Sborder(grids[lev], dmap[lev], S_new.nComp(), num_grow);
+    MultiFab Sborder(grids[lev], dmap[lev], S_new.nComp(), num_grow, mfinfo);
     FillPatch(lev, time, Sborder, 0, Sborder.nComp());
 
 #ifdef _OPENMP
@@ -549,6 +577,14 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 #endif
     {
 	FArrayBox flux[BL_SPACEDIM], uface[BL_SPACEDIM];
+#ifdef CUDA
+        for (int i = 0; i < BL_SPACEDIM ; i++) {
+            flux[i].usePinnedMemory(true);
+            uface[i].usePinnedMemory(true);
+            flux[i].needDeviceCopy(true);
+            uface[i].needDeviceCopy(true);
+        }
+#endif
 
 	for (MFIter mfi(S_new, false); mfi.isValid(); ++mfi)
 	{

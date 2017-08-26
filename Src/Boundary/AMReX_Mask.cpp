@@ -16,9 +16,17 @@ Mask::Mask ()
 Mask::Mask (const Box& bx,
             int        nc,
 	    bool       alloc,
-	    bool       shared)
+	    bool       shared
+#ifdef CUDA
+            , bool pinned
+#endif
+            )
     :
-    BaseFab<int>(bx,nc,alloc,shared) {}
+    BaseFab<int>(bx,nc,alloc,shared
+#ifdef CUDA
+            ,pinned
+#endif
+            ) {}
 
 Mask::Mask (std::istream& is)
 {

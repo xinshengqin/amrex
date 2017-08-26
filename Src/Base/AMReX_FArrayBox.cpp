@@ -156,9 +156,17 @@ FArrayBox::FArrayBox () {}
 FArrayBox::FArrayBox (const Box& b,
                       int        n,
 		      bool       alloc,
-		      bool       shared)
+		      bool       shared
+#ifdef CUDA
+                      , bool pinned
+#endif
+                      )
     :
-    BaseFab<Real>(b,n,alloc,shared)
+    BaseFab<Real>(b,n,alloc,shared
+#ifdef CUDA
+            ,pinned
+#endif
+            )
 {
     if (alloc) initVal();
 }

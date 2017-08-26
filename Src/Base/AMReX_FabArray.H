@@ -115,13 +115,7 @@ namespace amrex {
 //
 struct MFInfo {
     bool    alloc = true;
-#ifdef CUDA_UM
     bool    device = false;
-#else
-    // not using unified memory
-    // need to explicitly allocate memory on device
-    bool    device = true;
-#endif
     MFInfo& SetAlloc(bool a) { alloc = a; return *this; }
     MFInfo& SetDevice(bool d) { device = d; return *this; }
 };
@@ -492,8 +486,6 @@ protected:
     // ---- set of ids of fabarrays created without allocating memory
     static std::set<int> noallocFAPIds;
 
-    // for device memory
-    bool device;
 
     // for shared memory
     struct ShMem {
@@ -841,6 +833,7 @@ template <class FAB>
 void
 FabArray<FAB>::clear ()
 {
+    BL_PROFILE("FabArray<FAB>::clear()");
     if (define_function_called)
     {
         clearThisBD();  // addThisBD is called in define
@@ -875,8 +868,7 @@ FabArray<FAB>::setVal (value_type   val,
 
 template <class FAB>
 FabArray<FAB>::FabArray ()
-    : shmem(),
-      device(false)
+    : shmem()
 {
     m_FA_stats.recordBuild();
 }
@@ -888,8 +880,7 @@ FabArray<FAB>::FabArray (const BoxArray&            bxs,
                          int                        ngrow,
 			 const MFInfo&              info,
                          const FabFactory<FAB>&     factory)
-    : shmem(),
-      device(false)
+    : shmem()
 {
     m_FA_stats.recordBuild();
     define(bxs,dm,nvar,ngrow,info,factory);
@@ -897,8 +888,7 @@ FabArray<FAB>::FabArray (const BoxArray&            bxs,
 
 template <class FAB>
 FabArray<FAB>::FabArray (const FabArray<FAB>& rhs, MakeType maketype, int scomp, int ncomp)
-    : shmem(),
-      device(false)
+    : shmem()
 {
     m_FA_stats.recordBuild();
     define(rhs.boxArray(), rhs.DistributionMap(), ncomp, rhs.nGrow(), MFInfo().SetAlloc(false).SetDevice(false));
@@ -922,8 +912,7 @@ FabArray<FAB>::FabArray (const BoxArray&            bxs,
                          int                        nvar,
                          int                        ngrow,
                          const Array<value_type*>&  pval)
-    : shmem(),
-      device(false)
+    : shmem()
 {
     m_FA_stats.recordBuild();
     define(bxs,dm,nvar,ngrow,MFInfo().SetAlloc(false).SetDevice(false));
@@ -939,7 +928,6 @@ FabArray<FAB>::FabArray (FabArray<FAB>&& rhs) noexcept
     : FabArrayBase (std::move(rhs))
     , m_fabs_v     (std::move(rhs.m_fabs_v))
     , shmem        (std::move(rhs.shmem))
-    , device       (false)
     // no need to worry about the data used in non-blocking FillBoundary.
 {
     m_FA_stats.recordBuild();
@@ -1058,6 +1046,7 @@ template <class FAB>
 void
 FabArray<FAB>::AllocFabs (const FabFactory<FAB>& factory, const MFInfo& info)
 {
+    BL_PROFILE("FabArray<FAB>::AllocFabs()");
     const int n = indexArray.size();
     const int nworkers = ParallelDescriptor::TeamSize();
     shmem.alloc = (nworkers > 1);
@@ -1175,6 +1164,7 @@ FabArray<FAB>::AllocFabs (const FabFactory<FAB>& factory, const MFInfo& info)
     }
 #endif
 }
+
 
 template <class FAB>
 void

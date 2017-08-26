@@ -104,7 +104,11 @@ public:
     explicit BaseFab (const Box& bx,
                       int        n = 1,
 		      bool       alloc = true,
-		      bool       shared = false);
+		      bool       shared = false
+#ifdef CUDA
+                      , bool pinned = false
+#endif
+                      );
 
     BaseFab (const BaseFab<T>& rhs, MakeType make_type, int scomp, int ncomp);
 
@@ -920,6 +924,14 @@ public:
     int deviceID() {return device_id;}
     int deviceID() const {return device_id;}
     void setDevice(int device_id_) { device_id = device_id_; }
+    void needDeviceCopy(bool need) { device_copy = need; }
+    void usePinnedMemory(bool use = true) { 
+#ifdef CUDA
+        BL_ASSERT(dptr == 0);
+        pinned_memory = use;
+#endif
+    }
+    
 
 #ifdef CUDA_ARRAY
     //! get pitch of the CUDA 2D array
@@ -968,10 +980,18 @@ protected:
     T*      dptr;     // The data pointer.
     T*      dptr_d;   // The device copy of the data pointer.
     bool    ptr_owner;// Owner of T*?
-    bool    device_copy;    // Should we have a device copy of the data?
+    //! If this is true, it means we WANT to have a device copy but 
+    // not necessarily we already have one
+    bool    device_copy;    // Do we WANT a device copy of the data?
     bool    shared_memory;  // Is the memory allocated in shared memory?
 #ifdef CUDA
     int     device_id; // which device have a copy of the data
+    /* 
+     * Should we allocate pinned CPU memory or pageable CPU memory?
+     * For now, if this FAB is gonna have a device copy, pinned memory
+     * has to be allocated
+     */
+    bool    pinned_memory; 
 #ifdef CUDA_ARRAY
     std::size_t pitch; // pitch for CUDA 2d array
 #endif
@@ -1242,7 +1262,20 @@ BaseFab<T>::define ()
     BL_ASSERT(std::numeric_limits<long>::max()/nvar > numpts);
 
     truesize  = nvar*numpts;
-    dptr      = static_cast<T*>(amrex::The_Arena()->alloc(truesize*sizeof(T)));
+#ifdef CUDA
+    if (pinned_memory) {
+        BL_PROFILE_VAR("Allocate pinned CPU memory in BaseFab<T>::define()",alloc_pinned_cpu);
+        dptr      = static_cast<T*>(amrex::The_Arena()->alloc_pinned(truesize*sizeof(T)));
+        BL_PROFILE_VAR_STOP(alloc_pinned_cpu);
+    }
+    else {
+#endif
+        BL_PROFILE_VAR("Allocate regular CPU memory in BaseFab<T>::define()",alloc_regular_cpu);
+        dptr      = static_cast<T*>(amrex::The_Arena()->alloc(truesize*sizeof(T)));
+        BL_PROFILE_VAR_STOP(alloc_regular_cpu);
+#ifdef CUDA
+    }
+#endif
     ptr_owner = true;
     //
     // Now call T::T() on the raw memory so we have valid Ts.
@@ -1272,6 +1305,7 @@ BaseFab<T>::BaseFab ()
     device_copy(false),
 #ifdef CUDA
     device_id(-1),
+    pinned_memory(false),
 #endif
     shared_memory(false)
 {}
@@ -1280,7 +1314,11 @@ template <class T>
 BaseFab<T>::BaseFab (const Box& bx,
                      int        n,
 		     bool       alloc,
-		     bool       shared)
+		     bool       shared
+#ifdef CUDA
+                     , bool pinned
+#endif
+                     )
     :
     domain(bx),
     dlen(bx.size()),
@@ -1293,6 +1331,7 @@ BaseFab<T>::BaseFab (const Box& bx,
     device_copy(false),
 #ifdef CUDA
     device_id(-1),
+    pinned_memory(pinned),
 #endif
     shared_memory(shared)
 {
@@ -1313,6 +1352,7 @@ BaseFab<T>::BaseFab (const BaseFab<T>& rhs, MakeType make_type, int scomp, int n
     ptr_owner(false),
 #ifdef CUDA
     device_id(-1),
+    pinned_memory(false),
 #endif
     shared_memory(false)
 {
@@ -1343,6 +1383,7 @@ BaseFab<T>::BaseFab (const Box& bx, int ncomp, T* p)
     ptr_owner(false),
 #ifdef CUDA
     device_id(-1),
+    pinned_memory(false),
 #endif
     shared_memory(false)
 {
@@ -1367,6 +1408,7 @@ BaseFab<T>::BaseFab (BaseFab<T>&& rhs) noexcept
     ptr_owner(rhs.ptr_owner),
 #ifdef CUDA
     device_id(-1),
+    pinned_memory(false),
 #endif
     shared_memory(rhs.shared_memory)
 {
@@ -1399,9 +1441,11 @@ BaseFab<T>::resize (const Box& b,
 
         define();
 #ifdef CUDA
-        BL_ASSERT(device_id >= 0);
-        BL_ASSERT(dptr_d == 0);
-        allocate_device();
+        if (device_copy) {
+            BL_ASSERT(device_id >= 0);
+            BL_ASSERT(dptr_d == 0);
+            allocate_device();
+        }
 #endif
     }
     else if (nvar*numpts > truesize)
@@ -1413,9 +1457,11 @@ BaseFab<T>::resize (const Box& b,
 
         define();
 #ifdef CUDA
-        BL_ASSERT(device_id >= 0);
-        BL_ASSERT(dptr_d == 0);
-        allocate_device();
+        if (device_copy) {
+            BL_ASSERT(device_id >= 0);
+            BL_ASSERT(dptr_d == 0);
+            allocate_device();
+        }
 #endif
     }
 }
@@ -1425,6 +1471,7 @@ BaseFab<T>::resize (const Box& b,
 template <class T>
 void
 BaseFab<T>::allocate_device() {
+    BL_PROFILE("Allocate GPU memory in BaseFab<T>::allocate_device()");
 
 #ifdef CUDA
     BL_ASSERT(device_id >= 0);
@@ -1462,10 +1509,26 @@ BaseFab<T>::clear ()
 	    {
 		ptr->~T();
 	    }
-	    amrex::The_Arena()->free(dptr);
+#ifdef CUDA
+            if (pinned_memory) {
+                BL_PROFILE_VAR("Free pinned CPU memory in BaseFab<T>::clear()",free_pinned_cpu);
+                amrex::The_Arena()->free_pinned(dptr);
+                BL_PROFILE_VAR_STOP(free_pinned_cpu);
+            }
+            else {
+#endif
+                BL_PROFILE_VAR("Free regular CPU memory in BaseFab<T>::clear()",free_regular_cpu);
+                amrex::The_Arena()->free(dptr);
+                BL_PROFILE_VAR_STOP(free_regular_cpu);
+#ifdef CUDA
+            }
+#endif
 
-	    if (dptr_d)
+	    if (dptr_d) {
+                BL_PROFILE_VAR("Free GPU memory in BaseFab<T>::clear()",free_gpu);
 		amrex::The_Arena()->free_device(dptr_d);
+                BL_PROFILE_VAR_STOP(free_gpu);
+            }
 	    
 	    if (nvar > 1) {
 		amrex::update_fab_stats(-truesize/nvar, -truesize, sizeof(T));
@@ -2924,20 +2987,24 @@ BaseFab<T>::toDevice(int idx) const
     size_t sz = nBytes();
 #ifdef CUDA
     BL_ASSERT(right_GPU_is_used());
+    BL_ASSERT(device_copy);
+    BL_ASSERT(dptr_d != 0);
+    BL_ASSERT(dptr != 0);
+    BL_ASSERT(pinned_memory);
 
 #ifdef CUDA_UM
     gpu_htod_memprefetch_async(dptr, &sz, &idx, &device_id);
 #else // not using unified memory
-    if (device_copy && dptr_d && dptr) {
+    // if (device_copy && dptr_d && dptr) {
 #ifdef CUDA_ARRAY
-        std::size_t pitch_d = pitch;
-        std::size_t isize = dlen[0]*sizeof(T);
-        std::size_t jsize = dlen[1];
-	gpu_htod_memcpy_2d_async(dptr_d, &pitch_d, dptr, &isize, &isize, &jsize, &idx, &device_id);
+    std::size_t pitch_d = pitch;
+    std::size_t isize = dlen[0]*sizeof(T);
+    std::size_t jsize = dlen[1];
+    gpu_htod_memcpy_2d_async(dptr_d, &pitch_d, dptr, &isize, &isize, &jsize, &idx, &device_id);
 #else // not using CUDA 2d array
-	gpu_htod_memcpy_async(dptr_d, dptr, &sz, &idx, &device_id);
+    gpu_htod_memcpy_async(dptr_d, dptr, &sz, &idx, &device_id);
 #endif 
-    } 
+    // } 
 #endif
     getLastCudaError("BaseFab<T>::toDevice() failed.\n");
 
@@ -2952,19 +3019,24 @@ BaseFab<T>::toHost(int idx) const
     size_t sz = nBytes();
 #ifdef CUDA
     BL_ASSERT(right_GPU_is_used());
+    BL_ASSERT(device_copy);
+    BL_ASSERT(dptr_d != 0);
+    BL_ASSERT(dptr_d != 0);
+    BL_ASSERT(dptr != 0);
+    BL_ASSERT(pinned_memory);
 #ifdef CUDA_UM
     gpu_dtoh_memprefetch_async(dptr, &sz, &idx, &device_id);
 #else
-    if (device_copy && dptr_d && dptr) {
+    // if (device_copy && dptr_d && dptr) {
 #ifdef CUDA_ARRAY
-        std::size_t pitch_d = pitch;
-        std::size_t isize = dlen[0]*sizeof(T);
-        std::size_t jsize = dlen[1];
-	gpu_dtoh_memcpy_2d_async(dptr, &isize, dptr_d, &pitch_d, &isize, &jsize, &idx, &device_id);
+    std::size_t pitch_d = pitch;
+    std::size_t isize = dlen[0]*sizeof(T);
+    std::size_t jsize = dlen[1];
+    gpu_dtoh_memcpy_2d_async(dptr, &isize, dptr_d, &pitch_d, &isize, &jsize, &idx, &device_id);
 #else
-	gpu_dtoh_memcpy_async(dptr, dptr_d, &sz, &idx, &device_id);
+    gpu_dtoh_memcpy_async(dptr, dptr_d, &sz, &idx, &device_id);
 #endif // CUDA_ARRAY
-    }
+    // }
 #endif
     getLastCudaError("BaseFab<T>::toHost() failed.\n");
 #endif

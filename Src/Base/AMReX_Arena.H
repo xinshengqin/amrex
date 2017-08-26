@@ -28,9 +28,19 @@ public:
     */
     virtual void* alloc (std::size_t sz) = 0;
     /**
+    * Allocate a dynamic memory arena
+    * \param sz size of the memory request
+    * \return a pointer to the allocated memory
+    */
+    virtual void* alloc_pinned (std::size_t sz) = 0;
+    /**
     * \brief A pure virtual function for deleting the arena pointed to by pt
     */
     virtual void free (void* pt) = 0;
+    /**
+    * \brief A pure virtual function for deleting the arena pointed to by pt
+    */
+    virtual void free_pinned (void* pt) = 0;
     /**
     * Allocate a dynamic device memory arena
     * \param sz size of the memory request

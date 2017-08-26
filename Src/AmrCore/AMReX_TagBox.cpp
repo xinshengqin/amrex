@@ -16,9 +16,17 @@ TagBox::TagBox () {}
 TagBox::TagBox (const Box& bx,
                 int        n,
                 bool       alloc,
-		bool       shared)
+		bool       shared
+#ifdef CUDA
+                , bool pinned
+#endif
+                )
     :
-    BaseFab<TagBox::TagType>(bx,n,alloc,shared)
+    BaseFab<TagBox::TagType>(bx,n,alloc,shared
+#ifdef CUDA
+            ,pinned
+#endif
+            )
 {
     if (alloc) setVal(TagBox::CLEAR);
 }

@@ -20,12 +20,28 @@ public:
     /**
     * \brief Allocates a dynamic memory arena of size sz.
     * Returns a pointer to this memory.
+    * This implementation allocate pageable CPU memory
     */
     virtual void* alloc (std::size_t sz) override;
+
+    /**
+    * \brief Allocates a dynamic memory arena of size sz.
+    * Returns a pointer to this memory.
+    * This implementation allocate unpageable CPU memory
+    * It has the same effect as alloc if CUDA is not defined
+    */
+    virtual void* alloc_pinned (std::size_t sz) override;
+
     /**
     * \brief Deletes the arena pointed to by pt.
     */
     virtual void free (void* pt) override;
+
+    /**
+    * \brief Deletes the arena pointed to by pt.
+    * Used to free pinned memory
+    */
+    virtual void free_pinned (void* pt) override;
 
     /**
     * \brief Allocates a dynamic device memory arena of size sz.

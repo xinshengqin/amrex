@@ -45,7 +45,11 @@ public:
     explicit IArrayBox (const Box& b,
                         int        ncomp=1,
 			bool       alloc=true,
-			bool       shared=false);
+			bool       shared=false
+#ifdef CUDA
+                      , bool pinned = false
+#endif
+                        );
 
     IArrayBox (const IArrayBox& rhs, MakeType make_type, int scomp, int ncomp);
 
