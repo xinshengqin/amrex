@@ -1266,8 +1266,8 @@ BaseFab<T>::define ()
 #ifdef CUDA
     if (pinned_memory) {
         BL_PROFILE_VAR("Allocate pinned CPU memory in BaseFab<T>::define()",alloc_pinned_cpu);
-        dptr      = static_cast<T*>(amrex::The_Arena()->alloc_pinned(truesize*sizeof(T)));
-        // dptr = static_cast<T*>(amrex_mempool_alloc_pinned(truesize*sizeof(T)));
+        // dptr      = static_cast<T*>(amrex::The_Arena()->alloc_pinned(truesize*sizeof(T)));
+        dptr = static_cast<T*>(amrex_mempool_alloc_pinned(truesize*sizeof(T)));
         BL_PROFILE_VAR_STOP(alloc_pinned_cpu);
     }
     else {
@@ -1515,7 +1515,8 @@ BaseFab<T>::clear ()
 #ifdef CUDA
             if (pinned_memory) {
                 BL_PROFILE_VAR("Free pinned CPU memory in BaseFab<T>::clear()",free_pinned_cpu);
-                amrex::The_Arena()->free_pinned(dptr);
+                // amrex::The_Arena()->free_pinned(dptr);
+                amrex_mempool_free_pinned(dptr);
                 BL_PROFILE_VAR_STOP(free_pinned_cpu);
             }
             else {
@@ -1528,10 +1529,12 @@ BaseFab<T>::clear ()
 #endif
 
 	    if (dptr_d) {
+#ifdef CUDA
                 BL_PROFILE_VAR("Free GPU memory in BaseFab<T>::clear()",free_gpu);
 		// amrex::The_Arena()->free_device(dptr_d);
                 amrex_mempool_free_gpu(dptr_d, device_id);
                 BL_PROFILE_VAR_STOP(free_gpu);
+#endif
             }
 	    
 	    if (nvar > 1) {
