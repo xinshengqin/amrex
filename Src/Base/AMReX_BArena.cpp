@@ -1,6 +1,7 @@
 
 #include <AMReX_BArena.H>
 #include <AMReX_Device.H>
+#include <AMReX_BLassert.H>
 
 void*
 amrex::BArena::alloc (std::size_t _sz)
@@ -49,7 +50,9 @@ amrex::BArena::free (void* pt)
 {
 #ifdef CUDA
 #ifdef CUDA_UM
-    gpu_free(pt);
+    // TODO: CUDA_UM is not maintained
+    int dev_id = 0;
+    gpu_free(pt, &dev_id);
 #else
     ::operator delete(pt);
 #endif // CUDA_UM
@@ -63,7 +66,9 @@ amrex::BArena::free_pinned (void* pt)
 {
 #ifdef CUDA
 #ifdef CUDA_UM
-    gpu_free(pt);
+    // TODO: CUDA_UM is not maintained
+    int dev_id = 0;
+    gpu_free(pt, &dev_id);
 #else
     cpu_free_pinned(pt);
 #endif // CUDA_UM
@@ -79,6 +84,7 @@ amrex::BArena::alloc_device (std::size_t _sz, int device_id)
     void* pt = 0;
 
 #ifdef CUDA
+    BL_ASSERT(device_id >= 0);
     gpu_malloc(&pt, &_sz, &device_id);
 #endif
 
@@ -92,6 +98,7 @@ amrex::BArena::alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::si
     void* pt = 0;
 
 #ifdef CUDA
+    BL_ASSERT(device_id >= 0);
     gpu_malloc_2d(&pt, &_pitch, &_isize, &_jsize, &device_id);
 #endif
 
@@ -100,9 +107,10 @@ amrex::BArena::alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::si
 #endif
 
 void
-amrex::BArena::free_device (void* pt)
+amrex::BArena::free_device (void* pt, int device_id)
 {
 #ifdef CUDA
-    gpu_free(pt);
+    BL_ASSERT(device_id >= 0);
+    gpu_free(pt, &device_id);
 #endif
 }

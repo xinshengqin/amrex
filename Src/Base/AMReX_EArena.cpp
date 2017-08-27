@@ -1,14 +1,19 @@
+#ifdef CUDA
 
 #include <utility>
 #include <cstring>
 
-#include <AMReX_CArena.H>
+#include <AMReX_EArena.H>
 
 #include <AMReX_Device.H>
+#include <AMReX_CUDA_helper.H>
+
+#include <cuda_runtime_api.h>
+#include <cuda.h>
 
 namespace amrex {
 
-CArena::CArena (size_t hunk_size)
+EArena::EArena (size_t hunk_size)
 {
     //
     // Force alignment of hunksize.
@@ -20,16 +25,23 @@ CArena::CArena (size_t hunk_size)
     BL_ASSERT(m_hunk%Arena::align_size == 0);
 }
 
-CArena::~CArena ()
+EArena::~EArena ()
 {
-    for (unsigned int i = 0, N = m_alloc.size(); i < N; i++)
-        ::operator delete(m_alloc[i]);
+    CUresult cudaResult;
+    CUcontext cuctx;
+    cudaResult = cuCtxGetCurrent(&cuctx); 
+    if (cudaResult != CUDA_ERROR_DEINITIALIZED) {
+        for (unsigned int i = 0, N = m_alloc.size(); i < N; i++)
+            checkCudaErrors(cudaFreeHost(m_alloc[i]));
+    }
+    // otherwise device has been reset in amrex::Finalize() and 
+    // all device memory has been free. So we should not call cudaFree
 }
 
 void*
-CArena::alloc (size_t nbytes)
+EArena::alloc_pinned (size_t nbytes)
 {
-    nbytes = Arena::align(nbytes == 0 ? 1 : nbytes);
+    nbytes = EArena::align(nbytes == 0 ? 1 : nbytes);
     //
     // Find node in freelist at lowest memory address that'll satisfy request.
     //
@@ -45,7 +57,8 @@ CArena::alloc (size_t nbytes)
     {
         const size_t N = nbytes < m_hunk ? m_hunk : nbytes;
 
-        vp = ::operator new(N);
+        
+        checkCudaErrors(cudaHostAlloc(&vp, N, cudaHostAllocDefault));
 
         m_used += N;
 
@@ -97,7 +110,7 @@ CArena::alloc (size_t nbytes)
 }
 
 void
-CArena::free (void* vp)
+EArena::free_pinned (void* vp)
 {
     if (vp == 0)
         //
@@ -173,11 +186,21 @@ CArena::free (void* vp)
     }
 }
 
+std::size_t
+amrex::EArena::align (std::size_t s)
+{
+    std::size_t x = s + (align_size-1);
+    x -= x & (align_size-1);
+    return x;
+}
+
 
 size_t
-CArena::heap_space_used () const
+EArena::heap_space_used () const
 {
     return m_used;
 }
 
 }
+
+#endif

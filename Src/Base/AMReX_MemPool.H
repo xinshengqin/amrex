@@ -6,6 +6,8 @@ extern "C" {
     void* amrex_mempool_alloc (size_t n);
     void  amrex_mempool_free (void* p);
 #ifdef CUDA
+    void* amrex_mempool_alloc_pinned (size_t n);
+    void  amrex_mempool_free_pinned (void* p);
     void* amrex_mempool_alloc_gpu (size_t n, int dev_id);
     void  amrex_mempool_free_gpu (void* p, int dev_id);
 #endif

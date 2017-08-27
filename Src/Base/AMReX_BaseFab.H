@@ -1267,6 +1267,7 @@ BaseFab<T>::define ()
     if (pinned_memory) {
         BL_PROFILE_VAR("Allocate pinned CPU memory in BaseFab<T>::define()",alloc_pinned_cpu);
         dptr      = static_cast<T*>(amrex::The_Arena()->alloc_pinned(truesize*sizeof(T)));
+        // dptr = static_cast<T*>(amrex_mempool_alloc_pinned(truesize*sizeof(T)));
         BL_PROFILE_VAR_STOP(alloc_pinned_cpu);
     }
     else {

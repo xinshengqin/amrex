@@ -1,5 +1,5 @@
-#ifndef BL_DARENA_H
-#define BL_DARENA_H
+#ifndef BL_EARENA_H
+#define BL_EARENA_H
 
 #ifdef CUDA
 
@@ -18,14 +18,17 @@ namespace amrex {
 * chunks of heap space and apportions it out as requested.  It merges
 * together neighboring chunks on each free().
 *
-* This class can only allocate 1 type of dynamic memory: GPU memory
-* alloc_device(...) and free_device(...) can be called to get memory from 
-* and put it back to the memory pool
+* This class can only allocate 1 type of dynamic memory: 
+* CPU unpageable (pinned) memory
+* - both alloc(...) and alloc_pinned(...) can be called to allocate memory
+*   from the memory pool and are equivalent
+* - both free(...) and free_pinned(...) can be called to put memory back to
+*   the memory pool and are equivalent
 *
-* This class should not be used directly. Instead, use amrex_mempool_alloc_gpu
+* This class should not be used directly. Instead, use amrex_mempool_alloc_pinned
 */
 
-class DArena
+class EArena
     :
     public Arena
 {
@@ -35,52 +38,55 @@ public:
     * minimum size of hunks of memory to allocate from the heap.
     * If hunk_size == 0 we use DefaultHunkSize as specified below.
     */
-    DArena (int dev_id, size_t hunk_size = 0);
+    EArena (size_t hunk_size = 0);
     
     //! The destructor.
-    virtual ~DArena () override;
+    virtual ~EArena () override;
 
     //! Allocate some memory.
     virtual void* alloc (size_t nbytes) override {
         void* pt = 0;
-        amrex::Abort("DArena is a GPU memory pool. DArena::alloc() should not be called"); 
+        amrex::Abort("EArena is for pinned memory. EArena::alloc() should not be called"); 
         return pt;
     }
 
-    virtual void* alloc_pinned (std::size_t sz) override { 
-        void* pt = 0;
-        amrex::Abort("DArena is a GPU memory pool. DArena::alloc_pinned() should not be called"); 
-        return pt;
-    }
+    virtual void* alloc_pinned (std::size_t sz) override;
 
     /**
     * \brief Free up allocated memory.  Merge neighboring free memory chunks
     * into largest possible chunk.
     */
     virtual void free (void* ap) override {
-        amrex::Abort("DArena is a GPU memory pool. DArena::free() should not be called"); 
+        amrex::Abort("EArena is for pinned memory. EArena::free() should not be called"); 
     }
 
     /**
     * \brief Free up allocated memory.  Merge neighboring free memory chunks
     * into largest possible chunk.
     */
-    virtual void free_pinned (void* ap) override { amrex::Abort(
-            "DArena is a GPU memory pool. DArena::free_pinned() should not be called"); }
+    virtual void free_pinned (void* ap) override;
 
-    virtual void* alloc_device (size_t nbytes, int dev_id) override;
+    virtual void* alloc_device (size_t nbytes, int device_id) override {
+        void* pt = 0;
+        amrex::Abort("EArena is a CPU memory pool. EArena::alloc_device() should not be called"); 
+        return pt;
+    }
 #ifdef CUDA_ARRAY
     /*
      * do nothing for now
      */ 
-    virtual void* alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize, int dev_id) override { void* pt = 0; return pt;};
+    virtual void* alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize, int device_id) override {
+        void* pt = 0;
+        amrex::Abort("EArena is a CPU memory pool. EArena::alloc_device() should not be called"); 
+        return pt;
+    }
 #endif
-    virtual void free_device (void* ap, int dev_id) override;
+    virtual void free_device (void* ap, int dev_id) override {
+        amrex::Abort("EArena is a CPU memory pool. EArena::free_device() should not be called"); 
+    }
 
-    //! The current amount of heap space used by the DArena object.
+    //! The current amount of heap space used by the EArena object.
     size_t heap_space_used () const;
-
-    void useDevice(int dev_id) {device_id = dev_id;}
 
     //! The default memory hunk size to grab from the heap.
     enum { DefaultHunkSize = 1024*1024*512};
@@ -181,14 +187,12 @@ protected:
     static const unsigned int align_size = 256;
 
 private:
-    // which GPU's memory does this DArena manage
-    int device_id;
     //! Disallowed.
-    DArena (const DArena& rhs);
-    DArena& operator= (const DArena& rhs);
+    EArena (const EArena& rhs);
+    EArena& operator= (const EArena& rhs);
 };
 
 }
 
 #endif // CUDA
-#endif /*BL_DARENA_H*/
+#endif /*BL_EARENA_H*/

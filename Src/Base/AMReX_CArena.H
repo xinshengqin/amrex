@@ -15,6 +15,9 @@ namespace amrex {
 * This is a coalescing memory manager.  It allocates (possibly) large
 * chunks of heap space and apportions it out as requested.  It merges
 * together neighboring chunks on each free().
+* This class only manage 1 type of dynamic memory,
+* CPU pageable memory, from the memory pool, by using
+* alloc(...) and free(...)
 */
 
 class CArena
@@ -37,7 +40,7 @@ public:
 
     virtual void* alloc_pinned (std::size_t sz) override { 
         void* pt = 0;
-        amrex::Abort("CArena::alloc_pinned() not implemented"); 
+        amrex::Abort("CArena is not for managing pinned memory. CArena::alloc_pinned() should not be called"); 
         return pt;
     }
 
@@ -51,16 +54,30 @@ public:
     * \brief Free up allocated memory.  Merge neighboring free memory chunks
     * into largest possible chunk.
     */
-    virtual void free_pinned (void* ap) override { amrex::Abort("CArena::free_pinned() not implemented"); }
+    virtual void free_pinned (void* ap) override { 
+        amrex::Abort("CArena is not for managing pinned memory. CArena::alloc_pinned() should not be called"); 
+    }
 
-    virtual void* alloc_device (size_t nbytes, int device_id = 0) override;
+    virtual void* alloc_device (size_t nbytes, int device_id) override
+    {
+        void* pt = 0;
+        amrex::Abort("CArena is a CPU memory pool. CArena::alloc_device() should not be called"); 
+        return pt;
+    }
+
 #ifdef CUDA_ARRAY
     /*
      * do nothing for now
      */ 
-    virtual void* alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize, int device_id = 0) override { void* pt = 0; return pt;};
+    virtual void* alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize, int device_id) override {
+        void* pt = 0; 
+        amrex::Abort("CArena is a CPU memory pool. CArena::alloc_device_2d() should not be called"); 
+        return pt;
+    }
 #endif
-    virtual void free_device (void* ap) override;
+    virtual void free_device (void* ap, int device_id) override {
+        amrex::Abort("CArena is a CPU memory pool. CArena::free_device() should not be called"); 
+    }
 
     //! The current amount of heap space used by the CArena object.
     size_t heap_space_used () const;

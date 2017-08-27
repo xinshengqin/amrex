@@ -14,7 +14,7 @@ extern "C" {
     void finalize_cuda();
     void gpu_malloc(void** p, const std::size_t* sz, const int* device_id);
     void gpu_malloc_managed(void** p, const std::size_t* sz);
-    void gpu_free(void* p);
+    void gpu_free(void* p, const int* device_id);
     void cpu_malloc_pinned(void** p, const std::size_t* sz);
     void cpu_free_pinned(void* p);
     void gpu_synchronize();

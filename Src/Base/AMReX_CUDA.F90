@@ -198,16 +198,19 @@ contains
 
 
 
-  subroutine gpu_free(x) bind(c, name='gpu_free')
+  subroutine gpu_free(x, dev_id) bind(c, name='gpu_free')
 
-    use cudafor, only: cudaFree, c_devptr
+    use cudafor, only: cudaFree, c_devptr, cudaSetDevice
 
     implicit none
 
     type(c_devptr), value :: x
 
+    integer, intent(in) :: dev_id
+
     integer :: cudaResult
 
+    cudaResult = cudaSetDevice(dev_id)
     cudaResult = cudaFree(x)
 
   end subroutine gpu_free

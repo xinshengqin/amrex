@@ -7,13 +7,15 @@
 
 #include <AMReX_Device.H>
 #include <AMReX_CUDA_helper.H>
+#include <AMReX_ParallelDescriptor.H>
 
 #include <cuda_runtime_api.h>
 #include <cuda.h>
 
 namespace amrex {
 
-DArena::DArena (size_t hunk_size)
+DArena::DArena (int dev_id, size_t hunk_size)
+    :device_id(dev_id)
 {
     //
     // Force alignment of hunksize.
@@ -31,7 +33,8 @@ DArena::~DArena ()
     CUcontext cuctx;
     cudaResult = cuCtxGetCurrent(&cuctx); 
     if (cudaResult != CUDA_ERROR_DEINITIALIZED) {
-        for (unsigned int i = 0, N = m_alloc.size(); i < N; i++)
+        checkCudaErrors(cudaSetDevice(device_id));
+        for (unsigned int i = 0, N = m_alloc.size(); i < N; ++i)
             checkCudaErrors(cudaFree(m_alloc[i]));
     }
     // otherwise device has been reset in amrex::Finalize() and 
@@ -39,8 +42,9 @@ DArena::~DArena ()
 }
 
 void*
-DArena::alloc (size_t nbytes)
+DArena::alloc_device (size_t nbytes, int dev_id)
 {
+    BL_ASSERT(device_id == dev_id);
     nbytes = DArena::align(nbytes == 0 ? 1 : nbytes);
     //
     // Find node in freelist at lowest memory address that'll satisfy request.
@@ -57,10 +61,8 @@ DArena::alloc (size_t nbytes)
     {
         const size_t N = nbytes < m_hunk ? m_hunk : nbytes;
 
-        
-        // TODO: set device before allocate memory
+        checkCudaErrors(cudaSetDevice(device_id));
         checkCudaErrors(cudaMalloc(&vp, N));
-
         m_used += N;
 
         m_alloc.push_back(vp);
@@ -111,8 +113,9 @@ DArena::alloc (size_t nbytes)
 }
 
 void
-DArena::free (void* vp)
+DArena::free_device (void* vp, int dev_id)
 {
+    BL_ASSERT( device_id == dev_id );
     if (vp == 0)
         //
         // Allow calls with NULL as allowed by C++ delete.
@@ -195,19 +198,6 @@ amrex::DArena::align (std::size_t s)
     return x;
 }
 
-// C interface Device allocators are not currently implemented in DArena.
-
-void*
-DArena::alloc_device (size_t nbytes, int device_id)
-{
-    void* pt = 0;
-    return pt;
-}
-
-void
-DArena::free_device (void* pt)
-{
-}
 
 size_t
 DArena::heap_space_used () const

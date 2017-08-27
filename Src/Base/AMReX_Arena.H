@@ -46,15 +46,15 @@ public:
     * \param sz size of the memory request
     * \return a pointer to the allocated memory
     */
-    virtual void* alloc_device (std::size_t sz, int device_id = 0) = 0;
+    virtual void* alloc_device (std::size_t sz, int device_id) = 0;
 #ifdef CUDA_ARRAY
     // for 2d array on GPU
-    virtual void* alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize, int device_id = 0) = 0;
+    virtual void* alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize, int device_id) = 0;
 #endif
     /**
     * \brief A pure virtual function for deleting the device arena pointed to by pt
     */
-    virtual void free_device (void* pt) = 0;
+    virtual void free_device (void* pt, int device_id) = 0;
     /**
     * \brief Given a minimum required arena size of sz bytes, this returns
     * the next largest arena size that will align to align_size bytes

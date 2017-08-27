@@ -14,6 +14,7 @@
 #include <AMReX_CArena.H>
 #ifdef CUDA
 #include <AMReX_DArena.H>
+#include <AMReX_EArena.H>
 #include <AMReX_CUDA_helper.H>
 #include <cuda_runtime_api.h>
 #endif
@@ -33,8 +34,13 @@ namespace
 {
     static Array<std::unique_ptr<CArena> > the_memory_pool;
 #ifdef CUDA
-    // in the future we can have multiple devices so we need multiple DArenas
+    // Each DArena manages memory in one GPU
+    // device_memory_pool[i] manages memory in GPU i
     static Array<std::unique_ptr<DArena> > device_memory_pool;
+
+    // EArena manages pinned (unpageable) CPU memory for asynchronous 
+    // data transfer between CPU and GPU
+    static std::unique_ptr<EArena> pinned_memory_pool;
 #endif
 #if defined(BL_TESTING) || defined(DEBUG)
     static int init_snan = 1;
@@ -89,8 +95,9 @@ void amrex_mempool_init()
         int num_devices = ParallelDescriptor::get_num_devices_used();
 	device_memory_pool.resize(num_devices);
 	for (int i=0; i<num_devices; ++i) {
-	    device_memory_pool[i].reset(new DArena);
+	    device_memory_pool[i].reset(new DArena(i));
 	}
+        pinned_memory_pool.reset(new EArena);
 #endif
     }
 }
@@ -117,19 +124,27 @@ void amrex_mempool_free (void* p)
 }
 
 #ifdef CUDA
+void* amrex_mempool_alloc_pinned (size_t nbytes)
+{
+  return pinned_memory_pool->alloc_pinned(nbytes);
+}
+
+void amrex_mempool_free_pinned (void* p) 
+{
+  pinned_memory_pool->free_pinned(p);
+}
+
 void* amrex_mempool_alloc_gpu (size_t nbytes, int device_id)
 {
 
     BL_ASSERT(device_id >= 0);
-    checkCudaErrors(cudaSetDevice(device_id));
-    return device_memory_pool[device_id]->alloc(nbytes);
+    return device_memory_pool[device_id]->alloc_device(nbytes, device_id);
 }
 
 void amrex_mempool_free_gpu (void* p, int device_id) 
 {
     BL_ASSERT(device_id >= 0);
-    checkCudaErrors(cudaSetDevice(device_id));
-    device_memory_pool[device_id]->free(p);
+    device_memory_pool[device_id]->free_device(p, device_id);
 }
 #endif
 
