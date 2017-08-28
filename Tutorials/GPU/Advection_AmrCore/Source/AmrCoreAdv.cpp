@@ -611,6 +611,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 				     BL_TO_FORTRAN(uface[2])),
 			      dx, prob_lo);
 
+            BL_PROFILE_VAR("advect", advect);
 #ifdef CUDA
             int idx = mfi.LocalIndex();
             statein.toDevice(idx);
@@ -646,6 +647,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 			  BL_TO_FORTRAN_3D(flux[2])), 
 		   dx, dt);
 #endif
+            BL_PROFILE_VAR_STOP(advect);
 
 	    if (do_reflux) {
 		for (int i = 0; i < BL_SPACEDIM ; i++) {
