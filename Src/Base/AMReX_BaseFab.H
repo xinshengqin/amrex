@@ -1531,7 +1531,7 @@ BaseFab<T>::clear ()
 	    if (dptr_d) {
 #ifdef CUDA
                 BL_PROFILE_VAR("Free GPU memory in BaseFab<T>::clear()",free_gpu);
-		// amrex::The_Arena()->free_device(dptr_d);
+		// amrex::The_Arena()->free_device(dptr_d, device_id);
                 amrex_mempool_free_gpu(dptr_d, device_id);
                 BL_PROFILE_VAR_STOP(free_gpu);
 #endif

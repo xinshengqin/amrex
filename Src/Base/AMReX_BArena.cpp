@@ -50,7 +50,7 @@ amrex::BArena::free (void* pt)
 {
 #ifdef CUDA
 #ifdef CUDA_UM
-    // TODO: CUDA_UM is not maintained
+    amrex::Abort("unified memory is not supported yet in BArena");
     int dev_id = 0;
     gpu_free(pt, &dev_id);
 #else
@@ -66,7 +66,7 @@ amrex::BArena::free_pinned (void* pt)
 {
 #ifdef CUDA
 #ifdef CUDA_UM
-    // TODO: CUDA_UM is not maintained
+    amrex::Abort("unified memory is not supported yet in BArena");
     int dev_id = 0;
     gpu_free(pt, &dev_id);
 #else

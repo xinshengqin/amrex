@@ -15,6 +15,7 @@ namespace amrex {
 * This is a coalescing memory manager.  It allocates (possibly) large
 * chunks of heap space and apportions it out as requested.  It merges
 * together neighboring chunks on each free().
+*
 * This class only manage 1 type of dynamic memory,
 * CPU pageable memory, from the memory pool, by using
 * alloc(...) and free(...)

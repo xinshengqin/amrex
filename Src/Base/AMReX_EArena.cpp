@@ -57,7 +57,9 @@ EArena::alloc_pinned (size_t nbytes)
     {
         const size_t N = nbytes < m_hunk ? m_hunk : nbytes;
 
-        
+        if ( (m_used + N) > max_heap_size )
+            amrex::Abort("Not enough pinned memory available in EArena.");
+
         checkCudaErrors(cudaHostAlloc(&vp, N, cudaHostAllocDefault));
 
         m_used += N;
@@ -151,6 +153,14 @@ EArena::free_pinned (void* vp)
 
         if (addr == (*free_it).block())
         {
+            bool merge = true;
+            for (unsigned int i = 0, N = m_alloc.size(); i < N; i++) {
+                // Don't merge two nodes if the merge will give a node 
+                // whose memory block crosses the hunk boundary
+                if (addr == m_alloc[i]) {
+                    merge = false;
+                }
+            }
             //
             // This cast is needed as iterators to set return const values;
             // i.e. we can't legally change an element of a set.
@@ -162,11 +172,13 @@ EArena::free_pinned (void* vp)
             // then reinsert it with a different size() as it'll just go
             // back into the same place in the set.
             //
-            Node* node = const_cast<Node*>(&(*lo_it));
-            BL_ASSERT(!(node == 0));
-            node->size((*lo_it).size() + (*free_it).size());
-            m_freelist.erase(free_it);
-            free_it = lo_it;
+            if (merge) {
+                Node* node = const_cast<Node*>(&(*lo_it));
+                BL_ASSERT(!(node == 0));
+                node->size((*lo_it).size() + (*free_it).size());
+                m_freelist.erase(free_it);
+                free_it = lo_it;
+            }
         }
     }
 
@@ -176,13 +188,23 @@ EArena::free_pinned (void* vp)
 
     if (++hi_it != m_freelist.end() && addr == (*hi_it).block())
     {
-        //
-        // Ditto the above comment.
-        //
-        Node* node = const_cast<Node*>(&(*free_it));
-        BL_ASSERT(!(node == 0));
-        node->size((*free_it).size() + (*hi_it).size());
-        m_freelist.erase(hi_it);
+        bool merge = true;
+        for (unsigned int i = 0, N = m_alloc.size(); i < N; i++) {
+            // Don't merge two nodes if the merge will give a node 
+            // whose memory block crosses the hunk boundary
+            if (addr == m_alloc[i]) {
+                merge = false;
+            }
+        }
+        if (merge) {
+            //
+            // Ditto the above comment.
+            //
+            Node* node = const_cast<Node*>(&(*free_it));
+            BL_ASSERT(!(node == 0));
+            node->size((*free_it).size() + (*hi_it).size());
+            m_freelist.erase(hi_it);
+        }
     }
 }
 

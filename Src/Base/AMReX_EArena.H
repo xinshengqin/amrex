@@ -13,17 +13,14 @@
 namespace amrex {
 
 /**
-* \brief A Concrete Class for Dynamic **GPU** Memory Management
+* \brief A Concrete Class for Dynamic unpageable (pinned) CPU Memory Management
 * This is a coalescing memory manager.  It allocates (possibly) large
 * chunks of heap space and apportions it out as requested.  It merges
 * together neighboring chunks on each free().
 *
-* This class can only allocate 1 type of dynamic memory: 
-* CPU unpageable (pinned) memory
-* - both alloc(...) and alloc_pinned(...) can be called to allocate memory
-*   from the memory pool and are equivalent
-* - both free(...) and free_pinned(...) can be called to put memory back to
-*   the memory pool and are equivalent
+* This class only manage 1 type of dynamic memory,
+* CPU unpageable memory, from the memory pool, by using
+* alloc_pinned(...) and free_pinned(...)
 *
 * This class should not be used directly. Instead, use amrex_mempool_alloc_pinned
 */
@@ -89,7 +86,7 @@ public:
     size_t heap_space_used () const;
 
     //! The default memory hunk size to grab from the heap.
-    enum { DefaultHunkSize = 1024*1024*512};
+    enum { DefaultHunkSize = 1024*1024*1024};
 
     /**
     * \brief Given a minimum required arena size of sz bytes, this returns
@@ -185,6 +182,8 @@ protected:
 
     //! overwrite align_size for GPU memory performance
     static const unsigned int align_size = 256;
+    // How many memory in total we allow the EArena to allocate
+    static const size_t max_heap_size = (size_t) 1024 * 1024 * 1024 * 8;
 
 private:
     //! Disallowed.

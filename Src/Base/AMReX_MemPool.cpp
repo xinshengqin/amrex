@@ -95,7 +95,7 @@ void amrex_mempool_init()
         int num_devices = ParallelDescriptor::get_num_devices_used();
 	device_memory_pool.resize(num_devices);
 	for (int i=0; i<num_devices; ++i) {
-	    device_memory_pool[i].reset(new DArena(i));
+	    device_memory_pool[i].reset(new DArena(i,0));
 	}
         pinned_memory_pool.reset(new EArena);
 #endif

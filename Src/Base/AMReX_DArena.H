@@ -83,7 +83,7 @@ public:
     void useDevice(int dev_id) {device_id = dev_id;}
 
     //! The default memory hunk size to grab from the heap.
-    enum { DefaultHunkSize = 1024*1024*512};
+    enum { DefaultHunkSize = 1024*1024*1024};
 
     /**
     * \brief Given a minimum required arena size of sz bytes, this returns
@@ -179,6 +179,8 @@ protected:
 
     //! overwrite align_size for GPU memory performance
     static const unsigned int align_size = 256;
+    // How many memory in total we allow the DArena to allocate
+    static const size_t max_heap_size = (size_t) 1024 * 1024 * 1024 * 8;
 
 private:
     // which GPU's memory does this DArena manage
