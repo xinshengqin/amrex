@@ -2,6 +2,7 @@ module advect_module
 #ifdef CUDA
     use cuda_module, only: threads_and_blocks, stream_from_index
     use cuda_module, only: numThreads, numBlocks, cuda_streams 
+    use iso_c_binding
 #endif
     implicit none
     contains
@@ -16,7 +17,7 @@ subroutine advect(time, lo, hi, &
      &            flxz, fz_lo, fz_hi, &
      &            dx,dt &
 #ifdef CUDA
-                  , idx, device_id &
+                  , idx, device_id, tag &
 #endif
                 ) bind(C, name="advect")
   
@@ -50,6 +51,7 @@ subroutine advect(time, lo, hi, &
 #ifdef CUDA
   integer, value, intent(in) :: idx, device_id
   attributes(device) :: uin, uout, vx, vy, vz, flxx, flxy, flxz
+  integer(kind=c_intptr_t), value, intent(in) :: tag
 #endif 
 
   call advect_doit(time, lo, hi, &
@@ -63,7 +65,7 @@ subroutine advect(time, lo, hi, &
      &             flxz, fz_lo, fz_hi, &
      &             dx,dt &
 #ifdef CUDA
-                   , idx, device_id &
+                   , idx, device_id, tag &
 #endif
               )
 

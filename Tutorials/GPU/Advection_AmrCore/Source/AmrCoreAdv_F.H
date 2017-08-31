@@ -40,6 +40,7 @@ extern "C"
 #ifdef CUDA
                       , const int idx = 0
                       , const int device_id = 0
+                      , const intptr_t tag = 0
 #endif
                 );
 

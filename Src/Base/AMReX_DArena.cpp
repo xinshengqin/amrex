@@ -2,6 +2,7 @@
 
 #include <utility>
 #include <cstring>
+#include <mutex>
 
 #include <AMReX_DArena.H>
 
@@ -11,6 +12,12 @@
 
 #include <cuda_runtime_api.h>
 #include <cuda.h>
+
+// TODO: clean up
+static bool my_verbose = false;
+
+static std::mutex NL_mutex;
+static std::mutex TagMemoryBlocksContainer_mutex;
 
 namespace amrex {
 
@@ -32,11 +39,13 @@ DArena::~DArena ()
     CUresult cudaResult;
     CUcontext cuctx;
     cudaResult = cuCtxGetCurrent(&cuctx); 
+    if (my_verbose) 
+        std::cout << "Maximum GPU heap memory used during the execution: " << m_used << std::endl;
     if (cudaResult != CUDA_ERROR_DEINITIALIZED) {
         checkCudaErrors(cudaSetDevice(device_id));
         for (unsigned int i = 0, N = m_alloc.size(); i < N; ++i)
             checkCudaErrors(cudaFree(m_alloc[i]));
-    }
+    } 
     // otherwise device has been reset in amrex::Finalize() and 
     // all device memory has been free. So we should not call cudaFree
 }
@@ -44,6 +53,7 @@ DArena::~DArena ()
 void*
 DArena::alloc_device (size_t nbytes, int dev_id)
 {
+    std::lock_guard<std::mutex> alloc_device_guard(NL_mutex);
     BL_ASSERT(device_id == dev_id);
     nbytes = DArena::align(nbytes == 0 ? 1 : nbytes);
     //
@@ -62,7 +72,7 @@ DArena::alloc_device (size_t nbytes, int dev_id)
         const size_t N = nbytes < m_hunk ? m_hunk : nbytes;
 
         if ( (m_used + N) > max_heap_size )
-            amrex::Abort("Not enough GPU memory available in EArena.");
+            amrex::Abort("Not enough GPU memory available in DArena.");
 
         checkCudaErrors(cudaSetDevice(device_id));
         checkCudaErrors(cudaMalloc(&vp, N));
@@ -115,10 +125,60 @@ DArena::alloc_device (size_t nbytes, int dev_id)
     return vp;
 }
 
+void* 
+DArena::alloc_device (size_t nbytes, intptr_t tag, int dev_id)
+{
+    void* vp = alloc_device(nbytes, dev_id);
+
+    /*
+     * Record this memory block and its tag here
+     */
+    std::lock_guard<std::mutex> alloc_device_tag_guard(TagMemoryBlocksContainer_mutex);
+    TagMemoryBlocks idx_mem(tag);
+    auto search = m_memory_blocks.find(idx_mem);
+    if (search == m_memory_blocks.end()) { // new tag
+        idx_mem.push_back(vp);
+        m_memory_blocks.insert(idx_mem);
+    }
+    else { // already has memory blocks group associated with this tag in the container
+        search->push_back(vp);
+    }
+
+    // TODO: remove this at the end
+    if (my_verbose) {
+        std::cout << "Add pt: " << vp << " to m_memory_blocks. It's associated with tag: " << tag << std::endl;
+        std::cout << "m_memory_blocks[tag] becomes: " << std::endl;
+        auto search2 = m_memory_blocks.find(TagMemoryBlocks(tag));
+        search2->print();
+    }
+
+    return vp;
+
+}
+
+
+void
+DArena::free_device_tag (intptr_t tag, int dev_id)
+{
+    std::lock_guard<std::mutex> free_device_tag_guard(TagMemoryBlocksContainer_mutex);
+    auto search = m_memory_blocks.find(TagMemoryBlocks(tag));
+    BL_ASSERT( search != m_memory_blocks.end() );
+    std::vector<void*>& all_blocks = *(search->data);
+    for (auto it = all_blocks.begin(); it != all_blocks.end(); ++it) {
+        // TODO: remove this at the end
+        if (my_verbose) {
+            std::cout << "\tFree memory block at address: " << *it << std::endl;
+        }
+        free_device(*it, dev_id);
+    }
+    // remove idx from m_memory_blocks
+    m_memory_blocks.erase(search);
+}
 void
 DArena::free_device (void* vp, int dev_id)
 {
     BL_ASSERT( device_id == dev_id );
+    std::lock_guard<std::mutex> free_device_guard(NL_mutex);
     if (vp == 0)
         //
         // Allow calls with NULL as allowed by C++ delete.

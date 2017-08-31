@@ -74,9 +74,14 @@ module mempool_module
      module procedure gpu_allocate_r3
   end interface
 
+  interface gpu_allocate_hold
+     module procedure gpu_allocate_r3_hold
+  end interface
+
   interface gpu_deallocate
      module procedure gpu_deallocate_r3
   end interface
+
 
   interface 
      function amrex_mempool_alloc_gpu (nbytes, dev_id) result(p) bind(c)
@@ -85,6 +90,14 @@ module mempool_module
        type(c_devptr) :: p
        integer(kind=c_size_t), intent(in), value :: nbytes, dev_id
      end function amrex_mempool_alloc_gpu
+
+     function amrex_mempool_alloc_gpu_hold (nbytes, tag, dev_id) result(p) bind(c)
+       use cudafor
+       use, intrinsic :: iso_c_binding
+       type(c_devptr) :: p
+       integer(kind=c_size_t), intent(in), value :: nbytes, dev_id
+       integer(kind=c_intptr_t), intent(in), value :: tag
+     end function amrex_mempool_alloc_gpu_hold
      
      subroutine amrex_mempool_free_gpu (p, dev_id) bind(c)
        use cudafor
@@ -92,6 +105,12 @@ module mempool_module
        type(c_devptr), value :: p
        integer(kind=c_size_t), intent(in), value :: dev_id
      end subroutine amrex_mempool_free_gpu
+
+     ! subroutine amrex_mempool_release_gpu (idx, dev_id) bind(c)
+     !   use cudafor
+     !   use, intrinsic :: iso_c_binding
+     !   integer(kind=c_size_t), intent(in), value :: idx, dev_id
+     ! end subroutine amrex_mempool_release_gpu
 
   end interface
 
@@ -597,6 +616,35 @@ contains
         a => fp
       end subroutine shift_bound_d3
   end subroutine gpu_allocate_r3
+
+  subroutine gpu_allocate_r3_hold(a, tag, dev_id, lo1, hi1, lo2, hi2, lo3, hi3)
+    use cudafor
+    real(c_real), pointer, device, intent(inout) :: a(:,:,:)
+    integer, intent(in) :: lo1, hi1, lo2, hi2, lo3, hi3
+    integer, intent(in) :: dev_id
+    integer (kind=c_size_t) :: dev_id_c
+    integer (kind=c_intptr_t), intent(in) :: tag
+    integer :: n1, n2, n3
+    integer (kind=c_size_t) :: sz
+    type(c_devptr) :: cp
+    real(c_real), pointer, device :: fp(:,:,:)
+    n1 = max(hi1-lo1+1, 1)
+    n2 = max(hi2-lo2+1, 1)
+    n3 = max(hi3-lo3+1, 1)
+    sz = int(n1,c_size_t) * int(n2,c_size_t) * int(n3,c_size_t)
+    dev_id_c = int(dev_id,c_size_t)
+    cp = amrex_mempool_alloc_gpu_hold(szr*sz, tag, dev_id_c)
+    call c_f_pointer(cp, fp, shape=(/n1,n2,n3/))
+    call shift_bound_d3(fp, lo1, lo2, lo3, a)
+    contains
+      subroutine shift_bound_d3(fp, lo1, lo2, lo3, a)
+        integer, intent(in) :: lo1, lo2, lo3
+        real(c_real), target,  device, intent(in) :: fp(lo1:,lo2:,lo3:)
+        real(c_real), pointer, device, intent(inout) :: a(:,:,:)
+        ! double precision, dimension(:,:,:), allocatable, device, intent(inout) :: a
+        a => fp
+      end subroutine shift_bound_d3
+  end subroutine gpu_allocate_r3_hold
 
   subroutine gpu_deallocate_r3(a, dev_id)
     use cudafor

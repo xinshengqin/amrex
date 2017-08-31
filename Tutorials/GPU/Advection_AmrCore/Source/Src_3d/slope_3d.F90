@@ -2,6 +2,7 @@ module slope_module
 #ifdef CUDA
   use cuda_module, only: threads_and_blocks, stream_from_index
   use cuda_module, only: numThreads, numBlocks, cuda_streams 
+  use iso_c_binding
 #endif
  
   implicit none
@@ -18,11 +19,11 @@ contains
                     q, qlo, qhi, &
                     dq, dqlo, dqhi &
 #ifdef CUDA
-                    , idx, device_id &
+                    , idx, device_id, tag &
 #endif
                     )
 #ifdef CUDA
-    use mempool_module, only : gpu_allocate, gpu_deallocate
+    use mempool_module, only : gpu_allocate_hold, gpu_deallocate
 #else
     use mempool_module, only : bl_allocate, bl_deallocate
 #endif
@@ -39,6 +40,7 @@ contains
 #ifdef CUDA
     attributes(device) :: q, dq
     integer, intent(in) :: idx, device_id
+    integer(kind=c_intptr_t), value, intent(in) :: tag
 #endif
 
 #ifdef CUDA
@@ -49,10 +51,10 @@ contains
 #endif
 
 #ifdef CUDA
-    call gpu_allocate(dsgn  , device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
-    call gpu_allocate(dlim  , device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
-    call gpu_allocate(df    , device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
-    call gpu_allocate(dcen  , device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
+    call gpu_allocate_hold(dsgn  , tag, device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
+    call gpu_allocate_hold(dlim  , tag, device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
+    call gpu_allocate_hold(df    , tag, device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
+    call gpu_allocate_hold(dcen  , tag, device_id, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3)) 
 #else
     call bl_allocate(dsgn, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3))
     call bl_allocate(dlim, lo(1)-1, hi(1)+1, lo(2), hi(2), lo(3), hi(3))
@@ -90,10 +92,10 @@ contains
     end do
 
 #ifdef CUDA
-    call gpu_deallocate(dsgn, device_id)
-    call gpu_deallocate(dlim, device_id)
-    call gpu_deallocate(df  , device_id)
-    call gpu_deallocate(dcen, device_id)
+    ! call gpu_deallocate(dsgn, device_id)
+    ! call gpu_deallocate(dlim, device_id)
+    ! call gpu_deallocate(df  , device_id)
+    ! call gpu_deallocate(dcen, device_id)
 #else
     call bl_deallocate(dsgn)
     call bl_deallocate(dlim)
@@ -108,12 +110,12 @@ contains
                     q, qlo, qhi, &
                     dq, dqlo, dqhi&
 #ifdef CUDA
-                    , idx, device_id &
+                    , idx, device_id, tag &
 #endif
                     )
 
 #ifdef CUDA
-    use mempool_module, only : gpu_allocate, gpu_deallocate
+    use mempool_module, only : gpu_allocate_hold, gpu_deallocate
 #else
     use mempool_module, only : bl_allocate, bl_deallocate
 #endif
@@ -125,6 +127,7 @@ contains
 #ifdef CUDA
     integer, intent(in) :: idx, device_id
     attributes(device) :: q, dq
+    integer(kind=c_intptr_t), value, intent(in) :: tag
 #endif
 
 #ifdef CUDA
@@ -135,10 +138,10 @@ contains
 #endif
 
 #ifdef CUDA
-    call gpu_allocate(dsgn, device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
-    call gpu_allocate(dlim, device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
-    call gpu_allocate(df  , device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
-    call gpu_allocate(dcen, device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+    call gpu_allocate_hold(dsgn, tag, device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+    call gpu_allocate_hold(dlim, tag, device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+    call gpu_allocate_hold(df  , tag, device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
+    call gpu_allocate_hold(dcen, tag, device_id, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
 
 #else
     call bl_allocate(dsgn, lo(1), hi(1), lo(2)-1, hi(2)+1, lo(3), hi(3))
@@ -157,10 +160,10 @@ contains
                      )
 
 #ifdef CUDA
-    call gpu_deallocate(dsgn, device_id)
-    call gpu_deallocate(dlim, device_id)
-    call gpu_deallocate(df  , device_id)
-    call gpu_deallocate(dcen, device_id)
+    ! call gpu_deallocate(dsgn, device_id)
+    ! call gpu_deallocate(dlim, device_id)
+    ! call gpu_deallocate(df  , device_id)
+    ! call gpu_deallocate(dcen, device_id)
 #else
     call bl_deallocate(dsgn)
     call bl_deallocate(dlim)
@@ -230,12 +233,12 @@ contains
                     q, qlo, qhi, &
                     dq, dqlo, dqhi &
 #ifdef CUDA
-                    , idx, device_id &
+                    , idx, device_id, tag &
 #endif
                     )
 
 #ifdef CUDA
-    use mempool_module, only : gpu_allocate, gpu_deallocate
+    use mempool_module, only : gpu_allocate_hold, gpu_deallocate
 #else
     use mempool_module, only : bl_allocate, bl_deallocate
 #endif
@@ -247,6 +250,7 @@ contains
 #ifdef CUDA
     integer, intent(in) :: idx, device_id
     attributes(device) :: q, dq
+    integer(kind=c_intptr_t), value, intent(in) :: tag
 #endif
 
 #ifdef CUDA
@@ -258,10 +262,10 @@ contains
 #endif
 
 #ifdef CUDA
-    call gpu_allocate(dsgn, device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
-    call gpu_allocate(dlim, device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
-    call gpu_allocate(df  , device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
-    call gpu_allocate(dcen, device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
+    call gpu_allocate_hold(dsgn, tag, device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
+    call gpu_allocate_hold(dlim, tag, device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
+    call gpu_allocate_hold(df  , tag, device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
+    call gpu_allocate_hold(dcen, tag, device_id, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
 #else
     call bl_allocate(dsgn, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
     call bl_allocate(dlim, lo(1), hi(1), lo(2), hi(2), lo(3)-1, hi(3)+1)
@@ -280,10 +284,10 @@ contains
                      )
 
 #ifdef CUDA
-    call gpu_deallocate(dsgn, device_id)
-    call gpu_deallocate(dlim, device_id)
-    call gpu_deallocate(df  , device_id)
-    call gpu_deallocate(dcen, device_id)
+    ! call gpu_deallocate(dsgn, device_id)
+    ! call gpu_deallocate(dlim, device_id)
+    ! call gpu_deallocate(df  , device_id)
+    ! call gpu_deallocate(dcen, device_id)
 #else
     call bl_deallocate(dsgn)
     call bl_deallocate(dlim)

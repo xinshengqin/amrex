@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <set>
 #include <vector>
+#include <iostream>
 
 #include <AMReX_Arena.H>
 #include <AMReX_Array.H>
@@ -65,17 +66,21 @@ public:
     * \brief Free up allocated memory.  Merge neighboring free memory chunks
     * into largest possible chunk.
     */
-    virtual void free_pinned (void* ap) override { amrex::Abort(
-            "DArena is a GPU memory pool. DArena::free_pinned() should not be called"); }
+    virtual void free_pinned (void* ap) override { 
+        amrex::Abort("DArena is a GPU memory pool. DArena::free_pinned() should not be called"); 
+    }
 
-    virtual void* alloc_device (size_t nbytes, int dev_id) override;
+    virtual void* alloc_device (size_t nbytes, int dev_id) override; 
+
+    void* alloc_device (size_t nbytes, intptr_t tag, int dev_id);
 #ifdef CUDA_ARRAY
     /*
      * do nothing for now
      */ 
     virtual void* alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize, int dev_id) override { void* pt = 0; return pt;};
 #endif
-    virtual void free_device (void* ap, int dev_id) override;
+    virtual void free_device (void* ap, int dev_id) override; 
+    void free_device_tag (intptr_t tag, int dev_id);
 
     //! The current amount of heap space used by the DArena object.
     size_t heap_space_used () const;
@@ -180,11 +185,61 @@ protected:
     //! overwrite align_size for GPU memory performance
     static const unsigned int align_size = 256;
     // How many memory in total we allow the DArena to allocate
-    static const size_t max_heap_size = (size_t) 1024 * 1024 * 1024 * 8;
+    static const size_t max_heap_size = (size_t) 1024 * 1024 * 1024 * 20;
 
-private:
     // which GPU's memory does this DArena manage
     int device_id;
+
+    class TagMemoryBlocks {
+    public:
+        intptr_t tag;
+        std::vector<void*>* data;
+
+        TagMemoryBlocks() { data = new std::vector<void*>(); }
+        TagMemoryBlocks(intptr_t tag_): tag(tag_) { data = new std::vector<void*>(); }
+        ~TagMemoryBlocks() {
+            delete data;
+        }
+
+        // copy constructor
+        TagMemoryBlocks( const TagMemoryBlocks& src) {
+            tag = src.tag;
+            data = new std::vector<void*>(*(src.data));
+        }
+
+        // assignment operator
+        TagMemoryBlocks& operator= (const TagMemoryBlocks& other) = delete;
+
+        void push_back(void* memory_block) const {
+            data->push_back(memory_block);
+        }
+
+        // TODO: remove this 
+        // for debuggging
+        void print() const {
+            std::cout << "tag: " << tag << std::endl;
+            std::cout << "data size: " << data->size() << std::endl;
+            std::cout << "data: " << std::endl;
+            for (int j = 0; j < data->size(); ++j) {
+                std::cout << "\t" << (*data)[j];
+            }
+            std::cout << std::endl;
+        }
+    };
+    class TagMemoryBlocksComparator {
+        public:
+        bool operator()( const TagMemoryBlocks& lhs, const TagMemoryBlocks& rhs ) const {
+            return lhs.tag < rhs.tag;
+        }
+    };
+
+    typedef std::set<TagMemoryBlocks, TagMemoryBlocksComparator> TagMemoryBlocksContainer;
+
+    TagMemoryBlocksContainer m_memory_blocks;
+
+
+
+private:
     //! Disallowed.
     DArena (const DArena& rhs);
     DArena& operator= (const DArena& rhs);

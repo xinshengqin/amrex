@@ -2,6 +2,7 @@ module compute_flux_module
 #ifdef CUDA
     use cuda_module, only: threads_and_blocks, stream_from_index
     use cuda_module, only: numThreads, numBlocks, cuda_streams 
+    use iso_c_binding
 #endif
 
   implicit none
@@ -25,7 +26,7 @@ contains
                              phiz, phiz_x, phiz_y, &
                              slope, glo, ghi &
 #ifdef CUDA
-                             , idx, device_id &
+                             , idx, device_id, tag &
 #endif
                              )
 
@@ -60,6 +61,7 @@ contains
         phix, phix_y, phix_z, phiy, phiy_x, phiy_z, phiz, phiz_x, phiz_y, slope
     ! device 
     integer, intent(in) :: idx, device_id
+    integer(kind=c_intptr_t), value, intent(in) :: tag
 #endif
 
     hdtdx = 0.5*(dt/dx)
@@ -69,7 +71,7 @@ contains
                 phi, ph_lo, ph_hi, &
                 slope, glo, ghi &
 #ifdef CUDA
-                ,idx,device_id &
+                ,idx,device_id, tag &
 #endif
                 )
                 
@@ -96,7 +98,7 @@ contains
                 phi, ph_lo, ph_hi, &
                 slope, glo, ghi &
 #ifdef CUDA
-                ,idx,device_id &
+                ,idx,device_id, tag &
 #endif
                 )
                 
@@ -120,7 +122,7 @@ contains
                 phi, ph_lo, ph_hi, &
                 slope, glo, ghi &
 #ifdef CUDA
-                ,idx,device_id &
+                ,idx,device_id, tag &
 #endif
                 )
                 

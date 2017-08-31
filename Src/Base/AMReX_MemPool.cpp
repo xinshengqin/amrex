@@ -30,6 +30,9 @@
 
 using namespace amrex;
 
+// TODO: clean up
+static bool my_verbose = false;
+
 namespace
 {
     static Array<std::unique_ptr<CArena> > the_memory_pool;
@@ -138,12 +141,22 @@ void* amrex_mempool_alloc_gpu (size_t nbytes, int device_id)
 {
 
     BL_ASSERT(device_id >= 0);
+    BL_PROFILE("amrex_mempool_alloc_gpu");
     return device_memory_pool[device_id]->alloc_device(nbytes, device_id);
+}
+
+void* amrex_mempool_alloc_gpu_hold (size_t nbytes, intptr_t tag, int device_id)
+{
+
+    BL_ASSERT(device_id >= 0);
+    BL_PROFILE("amrex_mempool_alloc_gpu_hold");
+    return device_memory_pool[device_id]->alloc_device(nbytes, tag, device_id);
 }
 
 void amrex_mempool_free_gpu (void* p, int device_id) 
 {
     BL_ASSERT(device_id >= 0);
+    BL_PROFILE("amrex_mempool_free_gpu");
     device_memory_pool[device_id]->free_device(p, device_id);
 }
 #endif
@@ -185,3 +198,30 @@ void amrex_array_init_snan (double* p, size_t nelems)
 }
 
 }
+
+/*
+ * Below are C functions, not Fortran
+ */
+#ifdef CUDA
+void CUDART_CB cudaCallback_release_gpu(cudaStream_t event, cudaError_t status, void *data){
+    // checkCudaErrors(status);
+    // int idx = *((int*) data);
+    // TODO add device_id
+    intptr_t* tag = (intptr_t*) data;
+    if (my_verbose) {
+        std::cout << "call amrex_mempool_release_gpu with tag: " << *tag << std::endl;
+    }
+    amrex_mempool_release_gpu(*tag, 0);
+}
+
+void amrex_mempool_release_gpu (intptr_t tag, int device_id) 
+{
+    BL_ASSERT(device_id >= 0);
+    BL_PROFILE("amrex_mempool_free_gpu");
+    // TODO: remove this at the end
+    if (my_verbose) {
+        std::cout << "release all GPU memory blocks associated with tag: " << tag << std::endl;
+    }
+    device_memory_pool[device_id]->free_device_tag(tag, device_id);
+}
+#endif

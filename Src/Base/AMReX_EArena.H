@@ -183,7 +183,7 @@ protected:
     //! overwrite align_size for GPU memory performance
     static const unsigned int align_size = 256;
     // How many memory in total we allow the EArena to allocate
-    static const size_t max_heap_size = (size_t) 1024 * 1024 * 1024 * 8;
+    static const size_t max_heap_size = (size_t) 1024 * 1024 * 1024 * 32;
 
 private:
     //! Disallowed.
