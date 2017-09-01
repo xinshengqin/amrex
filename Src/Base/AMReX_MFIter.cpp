@@ -1,3 +1,4 @@
+#include <iostream>
 
 #include <AMReX_MFIter.H>
 #include <AMReX_FabArray.H>
@@ -243,8 +244,10 @@ MFIter::Initialize ()
 
 	currentIndex = beginIndex;
 #ifdef CUDA
-        int device_used = fabArray.deviceArray[currentIndex];
-        checkCudaErrors(cudaSetDevice(device_used));
+        if (isValid()) {
+            int device_used = fabArray.deviceArray[currentIndex];
+            checkCudaErrors(cudaSetDevice(device_used));
+        }
 #endif
 
 	typ = fabArray.boxArray().ixType();

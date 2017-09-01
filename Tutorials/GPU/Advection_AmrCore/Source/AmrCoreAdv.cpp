@@ -17,7 +17,7 @@
 
 using namespace amrex;
 
-static bool my_verbose = true;
+static const bool my_verbose = true;
 
 // constructor - reads in parameters from inputs file
 //             - sizes multilevel arrays and data structures
@@ -375,6 +375,8 @@ AmrCoreAdv::CountCells (int lev)
 void
 AmrCoreAdv::FillPatch (int lev, Real time, MultiFab& mf, int icomp, int ncomp)
 {
+    if (my_verbose)
+        std::cout << "AmrCoreAdv::FillPatch with lev = " << lev << std::endl;
     if (lev == 0)
     {
 	Array<MultiFab*> smf;
@@ -608,7 +610,12 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 #endif
 
         BL_PROFILE_VAR("advect and data transfer", advect_transfer);
+#ifdef CUDA
+        // MFIter, tiling = false, use_device = true
+	for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi)
+#else
 	for (MFIter mfi(S_new, false); mfi.isValid(); ++mfi)
+#endif
 	{
 	    const Box& bx = mfi.tilebox();
 
@@ -627,13 +634,13 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	    // }
 
             // compute velocities on faces (prescribed function of space and time)
-            BL_PROFILE_VAR("get_face_velocity", get_face_velocity);
+            BL_PROFILE_VAR("get_face_velocity_", get_face_velocity_);
 	    get_face_velocity(lev, ctr_time,
 			      AMREX_D_DECL(BL_TO_FORTRAN(ufaces[0][mfi]),
 				     BL_TO_FORTRAN(ufaces[1][mfi]),
 				     BL_TO_FORTRAN(ufaces[2][mfi])),
 			      dx, prob_lo);
-            BL_PROFILE_VAR_STOP(get_face_velocity);
+            BL_PROFILE_VAR_STOP(get_face_velocity_);
 
 #ifdef CUDA
             int idx = mfi.LocalIndex();
@@ -678,22 +685,19 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             if (my_verbose)
                  std::cout << "Add callback to CUDA stream associated with tag: " << m_tags[idx] << std::endl;
             cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
-            // gpu_synchronize();
-            // test: release memory here
-            // amrex_mempool_release_gpu(tag, dev_id);
 #else
             // compute new state (stateout) and fluxes.
-//             int idx = mfi.LocalIndex();
-//             advect(time, bx.loVect(), bx.hiVect(),
-// 		   BL_TO_FORTRAN_3D(statein), 
-// 		   BL_TO_FORTRAN_3D(stateout),
-// 		   AMREX_D_DECL(BL_TO_FORTRAN_3D(uface[0]),
-// 			  BL_TO_FORTRAN_3D(uface[1]),
-// 			  BL_TO_FORTRAN_3D(uface[2])),
-// 		   AMREX_D_DECL(BL_TO_FORTRAN_3D(flux[0]), 
-// 			  BL_TO_FORTRAN_3D(flux[1]), 
-// 			  BL_TO_FORTRAN_3D(flux[2])), 
-// 		   dx, dt);
+            int idx = mfi.LocalIndex();
+            advect(time, bx.loVect(), bx.hiVect(),
+		   BL_TO_FORTRAN_3D(statein), 
+		   BL_TO_FORTRAN_3D(stateout),
+		   AMREX_D_DECL(BL_TO_FORTRAN_3D(ufaces[0][mfi]),
+			  BL_TO_FORTRAN_3D(ufaces[1][mfi]),
+			  BL_TO_FORTRAN_3D(ufaces[2][mfi])),
+		   AMREX_D_DECL(BL_TO_FORTRAN_3D(fluxes[0][mfi]), 
+			  BL_TO_FORTRAN_3D(fluxes[1][mfi]), 
+			  BL_TO_FORTRAN_3D(fluxes[2][mfi])), 
+		   dx, dt);
 #endif
 
 	    // if (do_reflux) {
@@ -703,24 +707,11 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	    // }
 
 
-            /*
-             * TODO: GENERAL IDEA
-             * 1) create and insert a cpu callback function to the stream associated with idx
-             * 2) when all tasks before this insertion in the stream finish, the callback function
-             *    is called, which deallocates all memory associated with that idx, in memory pool
-             *
-             *
-             * DETAILS:
-             * 1) When allocate memory, call gpu_allocate(pt, lox, loy, ..., idx)
-             * 2) In GPU memory pool, we keep track of an array of vectors, each of which 
-             *    contains pointers to all memory blocks associated with an idx
-             * 3) When the event above is triggered, we find the vector, call gpu_deallocate 
-             *    to free all memory blocks recored by the vector.
-             */
 	}
-        gpu_synchronize();
         BL_PROFILE_VAR_STOP(advect_transfer);
+#ifdef CUDA
         delete[] m_tags;
+#endif
         // for (auto it = m_tags.begin(); it != m_tags.end(); ++it) {
         //     amrex_mempool_release_gpu(*it, 0);
         // }
@@ -806,12 +797,21 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 	{
 	    for (int i = 0; i < BL_SPACEDIM ; i++) {
 		const Box& bx = mfi.nodaltilebox(i);
-#ifdef CUDA
-		uface[i].setDevice(S_new[mfi].deviceID());
-#endif
+// #ifdef CUDA
+// 		uface[i].setDevice(S_new[mfi].deviceID());
+// #endif
 		uface[i].resize(bx,1);
 	    }
 
+// #ifdef _OPENMP
+// #pragma omp critical
+//             if (my_verbose) {
+//                 std::cout << "Thread " << omp_get_thread_num() << " calls EstTimeStep::get_face_velocity() with: " << std::endl;
+//                 std::cout << "uface[0].dataPtr:" << uface[0].dataPtr() << std::endl;
+//                 std::cout << "uface[1].dataPtr:" << uface[1].dataPtr() << std::endl;
+//                 std::cout << "uface[2].dataPtr:" << uface[2].dataPtr() << std::endl;
+//             }
+// #endif
 	    get_face_velocity(lev, cur_time,
 			      AMREX_D_DECL(BL_TO_FORTRAN(uface[0]),
 				     BL_TO_FORTRAN(uface[1]),

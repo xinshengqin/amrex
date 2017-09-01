@@ -10,9 +10,9 @@
 #include <cstring>
 #include <cstdint>
 
-#include <AMReX_ParallelDescriptor.H>
 #include <AMReX_CArena.H>
 #ifdef CUDA
+#include <AMReX_ParallelDescriptor.H>
 #include <AMReX_DArena.H>
 #include <AMReX_EArena.H>
 #include <AMReX_CUDA_helper.H>
@@ -107,12 +107,20 @@ void amrex_mempool_init()
 
 void* amrex_mempool_alloc (size_t nbytes)
 {
+  void* pt;
 #ifdef _OPENMP
   int tid = omp_get_thread_num();
 #else
   int tid = 0;
 #endif
-  return the_memory_pool[tid]->alloc(nbytes);
+  pt = the_memory_pool[tid]->alloc(nbytes);
+
+// #ifdef _OPENMP
+// #pragma omp critical
+// #endif
+//   if (my_verbose)
+//       std::cout << "amrex_mempool_alloc called in thread: " << tid << ", get pt: " << pt << std::endl;
+  return pt;
 }
 
 
@@ -123,6 +131,12 @@ void amrex_mempool_free (void* p)
 #else
   int tid = 0;
 #endif
+
+// #ifdef _OPENMP
+// #pragma omp critical
+// #endif
+//   if (my_verbose)
+//       std::cout << "amrex_mempool_free called in thread: " << tid << ", free pt: " << p << std::endl;
   the_memory_pool[tid]->free(p);
 }
 

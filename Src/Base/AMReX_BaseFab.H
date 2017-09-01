@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <limits>
+#include <iostream>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -986,7 +987,7 @@ protected:
     bool    device_copy;    // Do we WANT a device copy of the data?
     bool    shared_memory;  // Is the memory allocated in shared memory?
 #ifdef CUDA
-    int     device_id; // which device have a copy of the data
+    int     device_id; // which device has a copy of the data
     /* 
      * Should we allocate pinned CPU memory or pageable CPU memory?
      * For now, if this FAB is gonna have a device copy, pinned memory
@@ -1256,6 +1257,7 @@ template <class T>
 void
 BaseFab<T>::define ()
 {
+    const bool my_verbose = false;
     BL_ASSERT(nvar > 0);
     BL_ASSERT(dptr == 0);
     BL_ASSERT(dptr_d == 0);
@@ -1271,12 +1273,19 @@ BaseFab<T>::define ()
         BL_PROFILE_VAR_STOP(alloc_pinned_cpu);
     }
     else {
-#endif
         BL_PROFILE_VAR("Allocate regular CPU memory in BaseFab<T>::define()",alloc_regular_cpu);
         dptr      = static_cast<T*>(amrex::The_Arena()->alloc(truesize*sizeof(T)));
         BL_PROFILE_VAR_STOP(alloc_regular_cpu);
-#ifdef CUDA
+        // TODO:
+        if (my_verbose) {
+            std::cout << "Allocate regular CPU memory in BaseFab<T>::define()" << std::endl;
+            std::cout << "Get memory at:" << dptr << std::endl;
+        }
     }
+#else
+    BL_PROFILE_VAR("Allocate regular CPU memory in BaseFab<T>::define()",alloc_regular_cpu);
+    dptr      = static_cast<T*>(amrex::The_Arena()->alloc(truesize*sizeof(T)));
+    BL_PROFILE_VAR_STOP(alloc_regular_cpu);
 #endif
     ptr_owner = true;
     //
@@ -1520,15 +1529,17 @@ BaseFab<T>::clear ()
                 BL_PROFILE_VAR_STOP(free_pinned_cpu);
             }
             else {
-#endif
                 BL_PROFILE_VAR("Free regular CPU memory in BaseFab<T>::clear()",free_regular_cpu);
                 amrex::The_Arena()->free(dptr);
                 BL_PROFILE_VAR_STOP(free_regular_cpu);
-#ifdef CUDA
             }
+#else
+            BL_PROFILE_VAR("Free regular CPU memory in BaseFab<T>::clear()",free_regular_cpu);
+            amrex::The_Arena()->free(dptr);
+            BL_PROFILE_VAR_STOP(free_regular_cpu);
 #endif
 
-	    if (dptr_d) {
+	    if (dptr_d && device_copy) {
 #ifdef CUDA
                 BL_PROFILE_VAR("Free GPU memory in BaseFab<T>::clear()",free_gpu);
 		// amrex::The_Arena()->free_device(dptr_d, device_id);

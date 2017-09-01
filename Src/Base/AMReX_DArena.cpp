@@ -286,4 +286,4 @@ DArena::heap_space_used () const
 
 }
 
-#endif
+#endif //ifdef CUDA

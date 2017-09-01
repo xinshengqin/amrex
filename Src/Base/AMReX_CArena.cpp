@@ -4,8 +4,6 @@
 
 #include <AMReX_CArena.H>
 
-#include <AMReX_Device.H>
-
 namespace amrex {
 
 CArena::CArena (size_t hunk_size)
@@ -172,7 +170,6 @@ CArena::free (void* vp)
         m_freelist.erase(hi_it);
     }
 }
-
 
 size_t
 CArena::heap_space_used () const

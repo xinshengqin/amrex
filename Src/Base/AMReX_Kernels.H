@@ -9,6 +9,7 @@ namespace amrex {
     // void fill_bc_d2d(TagType<FAB>* tags, int n_tags, int scomp, int ncomp) {return;} 
     //
     // TODO: always assume 2D and ncomp is 1 for now
+    // TODO: we can call FORTRAN fort_copy_2d as device function inside this global function
 #if defined(CUDA) && defined(RESIDENT)
     template<typename T>
     __global__

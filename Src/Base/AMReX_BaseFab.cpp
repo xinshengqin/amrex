@@ -1,5 +1,5 @@
 
-
+#include <iostream>
 #include <cstring>
 #include <cstdlib>
 
@@ -14,6 +14,8 @@
 #ifdef BL_MEM_PROFILING
 #include <AMReX_MemProfiler.H>
 #endif
+
+static const bool my_verbose = false;
 
 namespace amrex {
 
@@ -180,6 +182,11 @@ BaseFab<Real>::performCopy (const BaseFab<Real>& src,
     BL_ASSERT(srccomp >= 0 && srccomp+numcomp <= src.nComp());
     BL_ASSERT(destcomp >= 0 && destcomp+numcomp <= nComp());
 
+    if (my_verbose) {
+        std::cout << "Calling fort_fab_copy..." << std::endl;
+        std::cout << "dest pt: " << this->dptr << std::endl;
+        std::cout << "src pt: " << src.dptr << std::endl;
+    }
     fort_fab_copy(ARLIM_3D(destbox.loVect()), ARLIM_3D(destbox.hiVect()),
 		  BL_TO_FORTRAN_N_3D(*this,destcomp),
 		  BL_TO_FORTRAN_N_3D(src,srccomp), ARLIM_3D(srcbox.loVect()),

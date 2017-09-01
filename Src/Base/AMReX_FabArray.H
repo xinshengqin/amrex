@@ -51,8 +51,8 @@
 #include <AMReX_CUDA_helper.H>
 #include <AMReX_Device.H>
 #include <AMReX_Kernels.H>
-#define ARRAY_2D(PHI, LO_X, LO_Y, HI_X, HI_Y, I, J) PHI[(J-LO_Y)*(HI_X-LO_X+1)+I-LO_X]
 #endif
+
 
 namespace amrex {
 
@@ -1283,6 +1283,10 @@ FabArray<FAB>::ParallelCopy (const FabArray<FAB>& src,
                              CpOp                 op)
 {
     BL_PROFILE("FabArray::ParallelCopy()");
+    const bool my_verbose = false;
+    if (my_verbose) {
+	amrex::Print() << "Calling FabArray::ParallelCopy()" << std::endl;
+    }
 
     if (size() == 0 || src.size() == 0) return;
 
@@ -1329,19 +1333,49 @@ FabArray<FAB>::ParallelCopy (const FabArray<FAB>& src,
         // There can only be local work to do.
         //
 	int N_loc = (*thecpc.m_LocTags).size();
+	if (my_verbose) {
+	    amrex::Print() << "number of total tags: " << N_loc << std::endl;
+	}
+			
 #ifdef _OPENMP
 #pragma omp parallel for if (thecpc.m_threadsafe_loc)
 #endif
 	for (int i=0; i<N_loc; ++i)
         {
-            const CopyComTag& tag = (*thecpc.m_LocTags)[i];
+// #ifdef _OPENMP
+// #pragma omp critical
+// #endif
+	    {
+		const CopyComTag& tag = (*thecpc.m_LocTags)[i];
 
-	    if (this != &src || tag.dstIndex != tag.srcIndex || tag.sbox != tag.dbox) {
-		// avoid self copy or plus
-		if (op == FabArrayBase::COPY) {
-		    get(tag.dstIndex).copy(src[tag.srcIndex],tag.sbox,scomp,tag.dbox,dcomp,ncomp);
-		} else {
-		    get(tag.dstIndex).plus(src[tag.srcIndex],tag.sbox,tag.dbox,scomp,dcomp,ncomp);
+		// TODO: These should be && insteand of ||?
+		if (this != &src || tag.dstIndex != tag.srcIndex || tag.sbox != tag.dbox) {
+		    // avoid self copy or plus
+		    if (op == FabArrayBase::COPY) {
+			if (my_verbose) {
+			    amrex::Print() << "+++++++++++++++++++++++++++++++++++++++" << std::endl;
+			    amrex::Print() << "In TheFB.m_LocTags: " << std::endl;
+			    amrex::Print() << "i: " << i << std::endl;
+			    amrex::Print() << "sbox: " << std::endl;
+			    amrex::Print() << tag.sbox << std::endl;
+			    amrex::Print() << "dbox: " << std::endl;
+			    amrex::Print() << tag.dbox << std::endl;
+			    amrex::Print() << "sfab: " << std::endl;
+			    amrex::Print() << "    " << "srcIndex: " << tag.srcIndex << std::endl;
+			    amrex::Print() << "    " << "pt: " << src[tag.srcIndex].dataPtr() << std::endl;
+			    amrex::Print() << "    " << "smallEnd: " << src[tag.srcIndex].smallEnd() << std::endl;
+			    amrex::Print() << "    " << "bigEnd: " << src[tag.srcIndex].bigEnd() << std::endl;
+			    amrex::Print() << "dfab: " << std::endl;
+			    amrex::Print() << "    " << "dstIndex: " << tag.dstIndex << std::endl;
+			    amrex::Print() << "    " << "pt: " << get(tag.dstIndex).dataPtr() << std::endl;
+			    amrex::Print() << "    " << "smallEnd: " << get(tag.dstIndex).smallEnd() << std::endl;
+			    amrex::Print() << "    " << "bigEnd: " << get(tag.dstIndex).bigEnd() << std::endl;
+			    amrex::Print() << std::endl;
+			}
+			get(tag.dstIndex).copy(src[tag.srcIndex],tag.sbox,scomp,tag.dbox,dcomp,ncomp);
+		    } else {
+			get(tag.dstIndex).plus(src[tag.srcIndex],tag.sbox,tag.dbox,scomp,dcomp,ncomp);
+		    }
 		}
 	    }
         }
@@ -3180,25 +3214,6 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
         fill_bc_d2d<amrex::Real><<<gridSize, blockSize>>>(TheFB.m_LocTagsDevice_d, N_loc, scomp, ncomp);
         getLastCudaError("fill_bc_d2d kernel execution failed.\n");
 #else // we already copy data back to cpu
-	for (int i=0; i<N_loc; ++i)
-        {
-            const CopyComTag& tag = (*TheFB.m_LocTags)[i];
-
-            BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
-            BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
-            get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
-        }
-        
-#endif
-        // synchronize all devices
-        int n_dev = ParallelDescriptor::get_num_devices_used();
-        for (int i = 0; i < n_dev; ++i) {
-            if (n_dev > 0) {
-                checkCudaErrors(cudaSetDevice(i));
-            }
-            checkCudaErrors(cudaDeviceSynchronize());
-        }
-#else // CUDA
 
 #ifdef _OPENMP
 #pragma omp parallel for if (TheFB.m_threadsafe_loc)
@@ -3211,7 +3226,31 @@ FabArray<FAB>::FBEP_nowait (int scomp, int ncomp, const Periodicity& period, boo
             BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
             get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
         }
-#endif // NO-GPU
+        
+#endif // END RESIDENT
+
+        // synchronize all devices
+        int n_dev = ParallelDescriptor::get_num_devices_used();
+        for (int i = 0; i < n_dev; ++i) {
+            if (n_dev > 0) {
+                checkCudaErrors(cudaSetDevice(i));
+            }
+            checkCudaErrors(cudaDeviceSynchronize());
+        }
+#else 
+
+#ifdef _OPENMP
+#pragma omp parallel for if (TheFB.m_threadsafe_loc)
+#endif
+	for (int i=0; i<N_loc; ++i)
+        {
+            const CopyComTag& tag = (*TheFB.m_LocTags)[i];
+
+            BL_ASSERT(distributionMap[tag.dstIndex] == ParallelDescriptor::MyProc());
+            BL_ASSERT(distributionMap[tag.srcIndex] == ParallelDescriptor::MyProc());
+            get(tag.dstIndex).copy(get(tag.srcIndex),tag.sbox,scomp,tag.dbox,scomp,ncomp);
+        }
+#endif // END CUDA
 
         return;
     }
