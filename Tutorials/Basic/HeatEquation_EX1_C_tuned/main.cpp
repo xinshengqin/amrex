@@ -201,8 +201,14 @@ void main_main ()
     DistributionMapping dm(ba);
 
     // we allocate two phi multifabs; one will store the old state, the other the new.
-    std::unique_ptr<MultiFab> phi_old(new MultiFab(ba, dm, Ncomp, Nghost));
-    std::unique_ptr<MultiFab> phi_new(new MultiFab(ba, dm, Ncomp, Nghost));
+    MFInfo mfinfo;
+#ifdef CUDA
+    mfinfo.SetDevice(true);
+#else
+    mfinfo.SetDevice(false);
+#endif
+    std::unique_ptr<MultiFab> phi_old(new MultiFab(ba, dm, Ncomp, Nghost, mfinfo));
+    std::unique_ptr<MultiFab> phi_new(new MultiFab(ba, dm, Ncomp, Nghost, mfinfo));
 
 
     phi_old->setVal(0.0);
@@ -250,10 +256,10 @@ void main_main ()
 // TODO: move this to somewhere else or wrap it in a member function
 // of Basefab, e.g. when allocate device memory
 #ifdef CUDA
+#ifdef RESIDENT
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
-#ifdef RESIDENT
     for ( MFIter mfi(*phi_old,0,true); mfi.isValid(); ++mfi )
     {
         // copy to device the 1st time
