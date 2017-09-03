@@ -102,6 +102,19 @@ ifeq ($(USE_MPI3),TRUE)
   USE_MPI := TRUE
 endif
 
+
+ifndef USE_CUDA
+  USE_CUDA = FALSE
+endif
+
+ifndef USE_CUDA_UM
+  USE_CUDA_UM = FALSE
+endif
+
+ifndef USE_CUDA_ARRAY
+  USE_CUDA_ARRAY = FALSE
+endif
+
 ifdef DIMENSION_AGNOSTIC
   DIMENSION_AGNOSTIC := $(strip $(DIMENSION_AGNOSTIC))
 else
@@ -156,6 +169,10 @@ else ifeq ($(lowercase_comp),$(filter $(lowercase_comp),llvm clang clang++))
   lowercase_comp = llvm
   $(info Loading $(AMREX_HOME)/Tools/GNUMake/comps/llvm.mak...)
   include        $(AMREX_HOME)/Tools/GNUMake/comps/llvm.mak
+else ifeq ($(lowercase_comp),$(filter $(lowercase_comp),cuda))
+  lowercase_comp = cuda
+  $(info LOADING $(AMREX_HOME)/Tools/GNUMake/comps/cuda.mak...)
+  include        $(AMREX_HOME)/Tools/GNUMake/comps/cuda.mak
 else ifeq ($(lowercase_comp),nag)
   $(info Loading $(AMREX_HOME)/Tools/GNUMake/comps/nag.mak...)
   include        $(AMREX_HOME)/Tools/GNUMake/comps/nag.mak
@@ -275,6 +292,31 @@ else
     OMPSuffix	:=
 endif
 
+ifeq ($(USE_CUDA),TRUE)
+    DEFINES += -DCUDA
+    ifeq ($(USE_CUDA_UM),TRUE)
+        DEFINES += -DCUDA_UM
+	DEFINES += -DBL_COALESCE_FABS
+    endif
+    ifeq ($(USE_CUDA_ARRAY),TRUE)
+        DEFINES += -DCUDA_ARRAY
+    endif
+    ifeq ($(ALL_ON_DEVICE),TRUE)
+        DEFINES += -DRESIDENT
+    endif
+    LIBRARIES += -lnvToolsExt -lcuda
+    LIBRARY_LOCATIONS += $(CUDA_PATH)/lib64 
+    INCLUDE_LOCATIONS += $(CUDA_PATH)/include
+    CUDASuffix := .CUDA
+    ifeq ($(USE_OMP),TRUE)
+        # because we generate *.o with gnu
+        # but link with pgfortran
+        LIBRARIES += -lgomp
+    endif
+else
+    CUDASuffix :=
+endif
+
 ifeq ($(USE_SINGLE_PRECISION_PARTICLES), TRUE)
   DEFINES += -DBL_SINGLE_PRECISION_PARTICLES
   amrex_particle_real = float
@@ -356,7 +398,7 @@ libraries	= $(LIBRARIES) $(XTRALIBS)
 
 LDFLAGS		+= -L. $(addprefix -L, $(LIBRARY_LOCATIONS))
 
-machineSuffix	= $(lowercase_comp)$(PrecisionSuffix)$(DebugSuffix)$(ProfSuffix)$(MProfSuffix)$(BTSuffix)$(MPISuffix)$(UPCXXSuffix)$(OMPSuffix)$(USERSuffix)
+machineSuffix	= $(lowercase_comp)$(PrecisionSuffix)$(DebugSuffix)$(ProfSuffix)$(MProfSuffix)$(BTSuffix)$(MPISuffix)$(UPCXXSuffix)$(OMPSuffix)$(CUDASuffix)$(USERSuffix)
 
 optionsSuffix	= $(DIM)d.$(machineSuffix)
 

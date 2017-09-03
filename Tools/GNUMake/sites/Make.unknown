@@ -6,8 +6,11 @@ os_type := $(shell uname)
 
 ifeq ($(USE_MPI),TRUE)
 
+# if CUDA is used, CXX is already set to nvcc which will call mpicxx
+ifeq ($(USE_CUDA),FALSE)
   CXX := mpicxx
   CC  := mpicc
+endif
   FC  := mpif90
   F90 := mpif90
 
