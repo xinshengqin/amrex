@@ -9,10 +9,12 @@ DEBUG      = FALSE
 DIM        = 2
 #DIM       = 3
 
-COMP	   = gnu
+USE_CUDA   = TRUE
+COMP 	   = cuda
+# COMP	   = gnu
 
-USE_MPI    = TRUE
-USE_OMP    = FALSE
+USE_MPI    = FALSE
+USE_OMP    = TRUE
 
 Bpack   := ./Make.package 
 Blocs   := . 
