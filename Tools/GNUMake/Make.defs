@@ -311,7 +311,7 @@ ifeq ($(USE_CUDA),TRUE)
     ifeq ($(USE_OMP),TRUE)
         # because we generate *.o with gnu
         # but link with pgfortran
-        LIBRARIES += -lgomp
+        # LIBRARIES += -lgomp
     endif
 else
     CUDASuffix :=
