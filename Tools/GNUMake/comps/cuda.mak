@@ -1,4 +1,3 @@
-#
 # Setup for compiling the CUDA version of AMReX with
 # CUDA C
 # Assumes you have set USE_CUDA=TRUE, and have
@@ -9,8 +8,6 @@ CXX = nvcc
 CC  = nvcc
 FC  = pgfortran
 F90 = pgfortran
-# FC  = gfortran
-# F90 = gfortran
 
 
 ifeq ($(USE_MPI),TRUE)
@@ -25,8 +22,6 @@ endif
 # verbose: -Xptxas=-v
 # CXXFLAGS += -Xptxas -dlcm=ca
 # CFLAGS += -Xptxas -dlcm=ca
-FFLAGS   =
-F90FLAGS =
 
 ########################################################################
 
@@ -41,8 +36,8 @@ ifeq ($(DEBUG),TRUE)
   # 2016-12-02: pgi 16.10 doesn't appear to like -traceback together with c++11
 
   #TODO: change these to pgc++ flags
-  CXXFLAGS += -G -Xptxas=-v -Xcompiler='-g -O0 -fno-inline -ggdb -Wall -Wno-sign-compare -ftrapv'
-  CFLAGS   += -G -Xptxas=-v -Xcompiler='-g -O0 -fno-inline -ggdb -Wall -Wno-sign-compare -ftrapv'
+  CXXFLAGS += -G -Xptxas=-v -Xcompiler='-g -O0 -Mbounds'
+  CFLAGS   += -G -Xptxas=-v -Xcompiler='-g -O0 -Mbounds'
   FFLAGS   += -g -O0 -Mbounds -Ktrap=divz,inv -Mchkptr
   F90FLAGS += -g -O0 -Mbounds -Ktrap=divz,inv -Mchkptr
 
@@ -50,8 +45,6 @@ else
 
   CXXFLAGS += -Xcompiler='-gopt -fast --c++11 -Mcuda=cuda8.0'
   CFLAGS   += -Xcompiler='-gopt -fast -c99 -Mcuda=cuda8.0'
-  # FFLAGS   += -g -O3
-  # F90FLAGS += -g -O3
   FFLAGS   += -gopt -fast -Mcuda=cuda8.0 -Mnomain -Mcuda=lineinfo
   F90FLAGS += -gopt -fast -Mcuda=cuda8.0 -Mnomain -Mcuda=lineinfo
 
@@ -62,17 +55,16 @@ endif
 
 F90FLAGS += -module $(fmoddir) -I$(fmoddir) -Mdclchk
 FFLAGS   += -module $(fmoddir) -I$(fmoddir) -Mextend
-# FFLAGS   += -ffixed-line-length-none -fno-range-check -fno-second-underscore -J$(fmoddir) -I $(fmoddir)
-# F90FLAGS += -ffree-line-length-none -fno-range-check -fno-second-underscore -J$(fmoddir) -I $(fmoddir) -fimplicit-none
 
 ########################################################################
 
 GENERIC_COMP_FLAGS =
+
 ifeq ($(USE_OMP),TRUE)
   CXXFLAGS += -Xcompiler='-mp=nonuma -Minfo=mp -noacc'
   CFLAGS   += -Xcompiler='-mp=nonuma -Minfo=mp -noacc'
   FFLAGS   += -mp=nonuma -Minfo=mp -noacc
-  F90FLAGS   += -mp=nonuma -Minfo=mp -noacc
+  F90FLAGS += -mp=nonuma -Minfo=mp -noacc
 endif
 
 
