@@ -14,8 +14,10 @@ ifeq ($(USE_MPI),TRUE)
     CXXFLAGS = -Wno-deprecated-gpu-targets -x cu --std=c++11 -ccbin=mpic++ -O3
     CFLAGS   = -Wno-deprecated-gpu-targets -x c -ccbin=mpicc -c99 -O3
 else
-    CXXFLAGS = -Wno-deprecated-gpu-targets -x cu -ccbin=pgc++ -O3 -dc
-    CFLAGS   = -Wno-deprecated-gpu-targets -x c -ccbin=pgcc -O3 -dc
+    CXXFLAGS = -Wno-deprecated-gpu-targets -x cu -std=c++11 -ccbin=g++ -O3 -dc
+    CFLAGS   = -Wno-deprecated-gpu-targets -x c -c99 -ccbin=gcc -O3 -dc
+    # CXXFLAGS = -Wno-deprecated-gpu-targets -x cu -ccbin=pgc++ -O3 -dc
+    # CFLAGS   = -Wno-deprecated-gpu-targets -x c -ccbin=pgcc -O3 -dc
 endif 
 
 # other options 
@@ -43,10 +45,13 @@ ifeq ($(DEBUG),TRUE)
 
 else
 
-  CXXFLAGS += -lineinfo -rdc=true -Xcompiler='-gopt -fast --c++11 -Mcuda=cuda8.0'
-  CFLAGS   += -lineinfo -rdc=true -Xcompiler='-gopt -fast -c99 -Mcuda=cuda8.0'
+  CXXFLAGS += -lineinfo -rdc=true -Xcompiler='-g -O3'
+  CFLAGS   += -lineinfo -rdc=true -Xcompiler='-g -O3'
   FFLAGS   += -gopt -fast -Mcuda=cuda8.0 -Mnomain -Mcuda=lineinfo -Mcuda=rdc
   F90FLAGS += -gopt -fast -Mcuda=cuda8.0 -Mnomain -Mcuda=lineinfo -Mcuda=rdc
+
+  # CXXFLAGS += -lineinfo -rdc=true -Xcompiler='-gopt -fast --c++11 -Mcuda=cuda8.0'
+  # CFLAGS   += -lineinfo -rdc=true -Xcompiler='-gopt -fast -c99 -Mcuda=cuda8.0'
 
 endif
 
@@ -61,10 +66,13 @@ FFLAGS   += -module $(fmoddir) -I$(fmoddir) -Mextend
 GENERIC_COMP_FLAGS =
 
 ifeq ($(USE_OMP),TRUE)
-  CXXFLAGS += -Xcompiler='-mp=nonuma -Minfo=mp -noacc'
-  CFLAGS   += -Xcompiler='-mp=nonuma -Minfo=mp -noacc'
+  # CXXFLAGS += -Xcompiler='-mp=nonuma -Minfo=mp -noacc'
+  # CFLAGS   += -Xcompiler='-mp=nonuma -Minfo=mp -noacc'
+  CXXFLAGS += -Xcompiler='-fopenmp'
+  CFLAGS   += -Xcompiler='-fopenmp'
   FFLAGS   += -mp=nonuma -Minfo=mp -noacc
   F90FLAGS += -mp=nonuma -Minfo=mp -noacc
+  override XTRALIBS += -lgomp
 endif
 
 
