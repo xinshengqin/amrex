@@ -17,7 +17,7 @@
 
 using namespace amrex;
 
-static const bool my_verbose = true;
+static const bool my_verbose = false;
 
 // constructor - reads in parameters from inputs file
 //             - sizes multilevel arrays and data structures
@@ -592,6 +592,13 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
     MultiFab Sborder(grids[lev], dmap[lev], S_new.nComp(), num_grow, mfinfo);
     FillPatch(lev, time, Sborder, 0, Sborder.nComp());
 
+#ifdef CUDA
+        // store tag for each fab here
+        int n_fabs = S_new.size();
+        intptr_t* m_tags = new intptr_t[n_fabs];
+#endif
+
+    BL_PROFILE_VAR("advect and data transfer", advect_transfer);
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
@@ -604,12 +611,8 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         //     // flux[i].needDeviceCopy(true);
         //     uface[i].needDeviceCopy(true);
         // }
-        // store tag for each fab here
-        int n_fabs = S_new.size();
-        intptr_t* m_tags = new intptr_t[n_fabs];
 #endif
 
-        BL_PROFILE_VAR("advect and data transfer", advect_transfer);
 #ifdef CUDA
         // MFIter, tiling = false, use_device = true
 	for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi)
@@ -650,32 +653,37 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             m_tags[idx] = (intptr_t) &stateout;
             if (my_verbose)
                 std::cout << "stateout in this FAB is at address: " << m_tags[idx] << std::endl;
-            statein.toDevice(idx);
-	    for (int d = 0; d < BL_SPACEDIM ; d++) {
-                ufaces[d][mfi].toDevice(idx);
+#ifdef _OPENMP
+#pragma omp critical
+#endif
+            {
+                statein.toDevice(idx);
+                for (int d = 0; d < BL_SPACEDIM ; d++) {
+                    ufaces[d][mfi].toDevice(idx);
+                }
+    //             advect(time, bx.loVect(), bx.hiVect(),
+    // 		   BL_TO_FORTRAN_3D_DEVICE(statein), 
+    // 		   BL_TO_FORTRAN_3D_DEVICE(stateout),
+    // 		   AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(uface[0]),
+    // 			  BL_TO_FORTRAN_3D_DEVICE(uface[1]),
+    // 			  BL_TO_FORTRAN_3D_DEVICE(uface[2])),
+    // 		   AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(flux[0]), 
+    // 			  BL_TO_FORTRAN_3D_DEVICE(flux[1]), 
+    // 			  BL_TO_FORTRAN_3D_DEVICE(flux[2])), 
+    // 		   dx, dt, idx, dev_id);
+                advect(time, bx.loVect(), bx.hiVect(),
+                       BL_TO_FORTRAN_3D_DEVICE(statein), 
+                       BL_TO_FORTRAN_3D_DEVICE(stateout),
+                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(ufaces[0][mfi]),
+                              BL_TO_FORTRAN_3D_DEVICE(ufaces[1][mfi]),
+                              BL_TO_FORTRAN_3D_DEVICE(ufaces[2][mfi])),
+                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(fluxes[0][mfi]), 
+                              BL_TO_FORTRAN_3D_DEVICE(fluxes[1][mfi]), 
+                              BL_TO_FORTRAN_3D_DEVICE(fluxes[2][mfi])), 
+                       dx, dt, idx, dev_id, m_tags[idx]);
             }
-//             advect(time, bx.loVect(), bx.hiVect(),
-// 		   BL_TO_FORTRAN_3D_DEVICE(statein), 
-// 		   BL_TO_FORTRAN_3D_DEVICE(stateout),
-// 		   AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(uface[0]),
-// 			  BL_TO_FORTRAN_3D_DEVICE(uface[1]),
-// 			  BL_TO_FORTRAN_3D_DEVICE(uface[2])),
-// 		   AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(flux[0]), 
-// 			  BL_TO_FORTRAN_3D_DEVICE(flux[1]), 
-// 			  BL_TO_FORTRAN_3D_DEVICE(flux[2])), 
-// 		   dx, dt, idx, dev_id);
-            advect(time, bx.loVect(), bx.hiVect(),
-		   BL_TO_FORTRAN_3D_DEVICE(statein), 
-		   BL_TO_FORTRAN_3D_DEVICE(stateout),
-		   AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(ufaces[0][mfi]),
-			  BL_TO_FORTRAN_3D_DEVICE(ufaces[1][mfi]),
-			  BL_TO_FORTRAN_3D_DEVICE(ufaces[2][mfi])),
-		   AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(fluxes[0][mfi]), 
-			  BL_TO_FORTRAN_3D_DEVICE(fluxes[1][mfi]), 
-			  BL_TO_FORTRAN_3D_DEVICE(fluxes[2][mfi])), 
-		   dx, dt, idx, dev_id, m_tags[idx]);
             stateout.toHost(idx);
-	    for (int d = 0; d < BL_SPACEDIM ; d++) {
+            for (int d = 0; d < BL_SPACEDIM ; d++) {
                 // flux[d].toHost(idx);
                 fluxes[d][mfi].toHost(idx);
             }
@@ -708,14 +716,20 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 
 
 	}
-        BL_PROFILE_VAR_STOP(advect_transfer);
-#ifdef CUDA
-        delete[] m_tags;
-#endif
-        // for (auto it = m_tags.begin(); it != m_tags.end(); ++it) {
-        //     amrex_mempool_release_gpu(*it, 0);
-        // }
     }
+#ifdef CUDA
+    // synchronize all devices
+    int n_dev = ParallelDescriptor::get_num_devices_used();
+    for (int i = 0; i < n_dev; ++i) {
+        checkCudaErrors(cudaSetDevice(i));
+        checkCudaErrors(cudaDeviceSynchronize());
+    }
+#endif
+    BL_PROFILE_VAR_STOP(advect_transfer);
+
+#ifdef CUDA
+    delete[] m_tags;
+#endif
 
     // increment or decrement the flux registers by area and time-weighted fluxes
     // Note that the fluxes have already been scaled by dt and area
