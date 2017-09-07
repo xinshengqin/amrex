@@ -56,7 +56,9 @@ public:
     {
         // if we need to allocate device memory, we allocate CPU memory as pinned memory
         // otherwise we allocate CPU memory as regular memory
+#ifdef CUDA
         bool allocate_pinned = info.device;
+#endif
         FAB* fab = new FAB(box, ncomps, info.alloc, info.shared
 #ifdef CUDA
                 , allocate_pinned

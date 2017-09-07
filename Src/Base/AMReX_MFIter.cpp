@@ -136,16 +136,20 @@ MFIter::~MFIter ()
     if ( ! (flags & NoTeamBarrier) )
 	ParallelDescriptor::MyTeam().MemoryBarrier();
 #endif
-#ifdef CUDA
-    if (use_device) {
-        // synchronize all devices
-        int n_dev = ParallelDescriptor::get_num_devices_used();
-        for (int i = 0; i < n_dev; ++i) {
-            checkCudaErrors(cudaSetDevice(i));
-            checkCudaErrors(cudaDeviceSynchronize());
-        }
-    }
-#endif
+// #ifdef CUDA
+// #ifdef _OPENMP
+// #pragma omp barrier
+// #pragma omp single
+// #endif
+//     if (use_device) {
+//         // synchronize all devices
+//         int n_dev = ParallelDescriptor::get_num_devices_used();
+//         for (int i = 0; i < n_dev; ++i) {
+//             checkCudaErrors(cudaSetDevice(i));
+//             checkCudaErrors(cudaDeviceSynchronize());
+//         }
+//     }
+// #endif
     // releaseDeviceData();
 }
 

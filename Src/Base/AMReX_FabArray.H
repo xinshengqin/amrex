@@ -1333,51 +1333,22 @@ FabArray<FAB>::ParallelCopy (const FabArray<FAB>& src,
         // There can only be local work to do.
         //
 	int N_loc = (*thecpc.m_LocTags).size();
-	if (my_verbose) {
-	    amrex::Print() << "number of total tags: " << N_loc << std::endl;
-	}
 			
 #ifdef _OPENMP
 #pragma omp parallel for if (thecpc.m_threadsafe_loc)
 #endif
 	for (int i=0; i<N_loc; ++i)
         {
-// #ifdef _OPENMP
-// #pragma omp critical
-// #endif
-	    {
-		const CopyComTag& tag = (*thecpc.m_LocTags)[i];
-
-		// TODO: These should be && insteand of ||?
-		if (this != &src || tag.dstIndex != tag.srcIndex || tag.sbox != tag.dbox) {
-		    // avoid self copy or plus
-		    if (op == FabArrayBase::COPY) {
-			if (my_verbose) {
-			    amrex::Print() << "+++++++++++++++++++++++++++++++++++++++" << std::endl;
-			    amrex::Print() << "In TheFB.m_LocTags: " << std::endl;
-			    amrex::Print() << "i: " << i << std::endl;
-			    amrex::Print() << "sbox: " << std::endl;
-			    amrex::Print() << tag.sbox << std::endl;
-			    amrex::Print() << "dbox: " << std::endl;
-			    amrex::Print() << tag.dbox << std::endl;
-			    amrex::Print() << "sfab: " << std::endl;
-			    amrex::Print() << "    " << "srcIndex: " << tag.srcIndex << std::endl;
-			    amrex::Print() << "    " << "pt: " << src[tag.srcIndex].dataPtr() << std::endl;
-			    amrex::Print() << "    " << "smallEnd: " << src[tag.srcIndex].smallEnd() << std::endl;
-			    amrex::Print() << "    " << "bigEnd: " << src[tag.srcIndex].bigEnd() << std::endl;
-			    amrex::Print() << "dfab: " << std::endl;
-			    amrex::Print() << "    " << "dstIndex: " << tag.dstIndex << std::endl;
-			    amrex::Print() << "    " << "pt: " << get(tag.dstIndex).dataPtr() << std::endl;
-			    amrex::Print() << "    " << "smallEnd: " << get(tag.dstIndex).smallEnd() << std::endl;
-			    amrex::Print() << "    " << "bigEnd: " << get(tag.dstIndex).bigEnd() << std::endl;
-			    amrex::Print() << std::endl;
-			}
-			get(tag.dstIndex).copy(src[tag.srcIndex],tag.sbox,scomp,tag.dbox,dcomp,ncomp);
-		    } else {
-			get(tag.dstIndex).plus(src[tag.srcIndex],tag.sbox,tag.dbox,scomp,dcomp,ncomp);
-		    }
-		}
-	    }
+            const CopyComTag& tag = (*thecpc.m_LocTags)[i];
+            // TODO: These should be && insteand of ||?
+            if (this != &src || tag.dstIndex != tag.srcIndex || tag.sbox != tag.dbox) {
+                // avoid self copy or plus
+                if (op == FabArrayBase::COPY) {
+                    get(tag.dstIndex).copy(src[tag.srcIndex],tag.sbox,scomp,tag.dbox,dcomp,ncomp);
+                } else {
+                    get(tag.dstIndex).plus(src[tag.srcIndex],tag.sbox,tag.dbox,scomp,dcomp,ncomp);
+                }
+            }
         }
 
         return;
