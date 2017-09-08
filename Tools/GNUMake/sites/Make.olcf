@@ -8,14 +8,36 @@ ifneq ($(which_computer), $(findstring $(which_computer), $(OLCF_MACHINES)))
   $(error Unknown OLCF computer, $(which_computer))
 endif
 
+##### if using titan machine
 ifeq ($(which_computer),$(filter $(which_computer),titan))
 
-ifdef PE_ENV
-  lowercase_peenv := $(shell echo $(PE_ENV) | tr A-Z a-z)
-  ifneq ($(lowercase_peenv),$(lowercase_comp))
-    has_compiler_mismatch = COMP=$(COMP) does not match PrgEnv-$(lowercase_peenv)
+FC  = ftn
+F90 = ftn
+
+# if COMP is not cuda, use cc and CC as c/c++ compiler
+# otherwise use nvcc, which is already set
+ifneq ($(lowercase_comp),cuda)
+
+  CC  = cc
+  CXX = CC
+
+  ifdef PE_ENV
+    lowercase_peenv := $(shell echo $(PE_ENV) | tr A-Z a-z)
+    ifneq ($(lowercase_peenv),$(lowercase_comp))
+      has_compiler_mismatch = COMP=$(COMP) does not match PrgEnv-$(lowercase_peenv)
+    endif
   endif
+  
+else #using cuda
+
+  lowercase_peenv := $(shell echo $(PE_ENV) | tr A-Z a-z)
+  ifneq ($(lowercase_peenv),pgi)
+    has_compiler_mismatch = Need to use PrgEnv-pgi for cuda! PrgEnv-$(lowercase_peenv) is used.
+  endif
+  
 endif
+
+
 
 ifeq ($(USE_MPI),TRUE)
   CC  = cc
@@ -26,6 +48,7 @@ ifeq ($(USE_MPI),TRUE)
 endif
 
 endif
+##### end if using titan machine
 
 ifeq ($(which_computer),$(filter $(which_computer),summit))
 
