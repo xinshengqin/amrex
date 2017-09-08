@@ -66,3 +66,15 @@ endif
 
 endif
 
+# Notes for compiling on Titan
+# If you want to use nvcc (with gcc as host compiler) and
+# pgfortran, you should 
+# 1) module load PrgEnv-pgi
+# 2) module swap pgi/16.10.0 pgi/17.7.0
+# 3) module load gcc
+# Step 3 gives you gcc 4.9.3 for nvcc to use as host compiler.
+# However, PGI is using gcc 4.3.4, which does not support c++11.
+# So you need to run 
+# /opt/pgi/17.7.0/linux86-64/17.7/bin/makelocalrc -o -gcc /opt/gcc/4.9.3/bin/gcc -gpp /opt/gcc/4.9.3/bin/g++ -g77 /opt/gcc/4.9.3/bin/gfortran >> ~/.mypgirc
+# which will let PGI use gcc 4.9.3
+# Now you can compile amrex
