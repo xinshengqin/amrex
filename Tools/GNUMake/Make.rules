@@ -25,7 +25,7 @@ endif
 #
 $(executable):	$(objForExecs)
 	@echo Linking $@ ...
-ifeq ($(USE_CUDA),TRUE)
+ifeq ($(lowercase_comp),cuda)
 	$(SILENT) $(FC) $(FFLAGS) $(includes) $(LDFLAGS) -o $@ $^ $(libraries)
 else
     ifeq ($(LINK_WITH_FORTRAN_COMPILER),TRUE)

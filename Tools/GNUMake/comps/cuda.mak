@@ -82,6 +82,8 @@ override XTRALIBS += -pgf90libs -L /sw/summitdev/gcc/5.4.0new/lib64/ -latomic -l
 else 
     ifeq ($(which_computer),$(filter $(which_computer),titan))
         override XTRALIBS += -pgf90libs -latomic -lquadmath -lstdc++
+	CXXFLAGS += --generate-code arch=compute_35,code=sm_35 
+	CFLAGS   += --generate-code arch=compute_35,code=sm_35 
     else		
         override XTRALIBS += -pgf90libs -latomic -lquadmath -lstdc++
     endif

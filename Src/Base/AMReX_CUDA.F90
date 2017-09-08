@@ -322,7 +322,10 @@ contains
 
   subroutine gpu_htod_memprefetch_async(p, sz, idx, dev_id) bind(c, name='gpu_htod_memprefetch_async')
 
-    use cudafor, only: cudaMemPrefetchAsync, c_devptr
+    use cudafor, only: c_devptr 
+#if (__CUDACC_VER_MAJOR__ >= 8)
+    use cudafor, only: cudaMemPrefetchAsync
+#endif
     use iso_c_binding, only: c_size_t
 
     implicit none
@@ -334,8 +337,10 @@ contains
     integer :: s
     integer :: cudaResult
 
+#if (__CUDACC_VER_MAJOR__ >= 8)
     s = stream_from_index(idx)
     cudaResult = cudaMemPrefetchAsync(p, sz, cuda_device_id, cuda_streams(s,dev_id))
+#endif
 
   end subroutine gpu_htod_memprefetch_async
 
@@ -343,7 +348,10 @@ contains
 
   subroutine gpu_dtoh_memprefetch_async(p, sz, idx, dev_id) bind(c, name='gpu_dtoh_memprefetch_async')
 
-    use cudafor, only: cudaMemPrefetchAsync, c_devptr, cudaCpuDeviceId
+#if (__CUDACC_VER_MAJOR__ >= 8)
+    use cudafor, only: cudaMemPrefetchAsync
+#endif
+    use cudafor, only: c_devptr, cudaCpuDeviceId
     use iso_c_binding, only: c_size_t
 
     implicit none
@@ -355,8 +363,10 @@ contains
     integer :: s
     integer :: cudaResult
 
+#if (__CUDACC_VER_MAJOR__ >= 8)
     s = stream_from_index(idx)
     cudaResult = cudaMemPrefetchAsync(p, sz, cudaCpuDeviceId, cuda_streams(s,dev_id))
+#endif
 
   end subroutine gpu_dtoh_memprefetch_async
 
@@ -393,7 +403,10 @@ contains
 
   subroutine mem_advise_set_preferred(p, sz, device) bind(c, name='mem_advise_set_preferred')
 
-    use cudafor, only: c_devptr, cudaMemAdvise, cudaMemAdviseSetPreferredLocation
+#if (__CUDACC_VER_MAJOR__ >= 8)
+    use cudafor, only: cudaMemAdvise, cudaMemAdviseSetPreferredLocation
+#endif
+    use cudafor, only: c_devptr
     use iso_c_binding, only: c_size_t, c_int
 
     type(c_devptr) :: p
@@ -402,7 +415,9 @@ contains
 
     integer :: cudaResult
 
+#if (__CUDACC_VER_MAJOR__ >= 8)
     cudaResult = cudaMemAdvise(p, sz, cudaMemAdviseSetPreferredLocation, device)
+#endif
 
   end subroutine mem_advise_set_preferred
 
