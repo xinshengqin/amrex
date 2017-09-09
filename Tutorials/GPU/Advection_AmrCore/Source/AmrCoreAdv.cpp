@@ -642,20 +642,16 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	    // }
 
             // compute velocities on faces (prescribed function of space and time)
-	    // get_face_velocity(lev, ctr_time,
-	    //     	      AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
-	    //     		     BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
-	    //     		     BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
-	    //     	      dx, prob_lo
-#ifdef CUDA
-            //                   , idx, dev_id, m_tags[idx]
-#endif
-            //                   );
 	    get_face_velocity(lev, ctr_time,
-			      AMREX_D_DECL(BL_TO_FORTRAN(ufaces[0][mfi]),
-				     BL_TO_FORTRAN(ufaces[1][mfi]),
-				     BL_TO_FORTRAN(ufaces[2][mfi])),
-			      dx, prob_lo);
+	        	      AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
+	        		     BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
+	        		     BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
+	        	      dx, prob_lo
+#ifdef CUDA
+                              , idx, dev_id, m_tags[idx]
+#endif
+                              );
+
 
 #ifdef CUDA
 
@@ -664,9 +660,9 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 #endif
             {
                 statein.toDevice(idx);
-                for (int d = 0; d < BL_SPACEDIM ; d++) {
-                    ufaces[d][mfi].toDevice(idx);
-                }
+                // for (int d = 0; d < BL_SPACEDIM ; d++) {
+                //     ufaces[d][mfi].toDevice(idx);
+                // }
     //             advect(time, bx.loVect(), bx.hiVect(),
     // 		   BL_TO_FORTRAN_3D_DEVICE(statein), 
     // 		   BL_TO_FORTRAN_3D_DEVICE(stateout),

@@ -20,7 +20,7 @@ extern "C"
 				  BL_FORT_FAB_ARG(yvel),
 				  BL_FORT_FAB_ARG(zvel)),
 			   const amrex_real* dx, const amrex_real* problo
-#ifdef NCUDA
+#ifdef CUDA
                            , const int idx = 0
                            , const int device_id = 0
                            , const intptr_t tag = 0
