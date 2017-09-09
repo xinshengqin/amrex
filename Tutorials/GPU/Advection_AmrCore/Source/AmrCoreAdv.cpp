@@ -819,7 +819,7 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 		uface[i].resize(bx,1);
 	    }
 
-	    get_face_velocity(lev, cur_time,
+	    get_face_velocity_host(lev, cur_time,
 			      AMREX_D_DECL(BL_TO_FORTRAN(uface[0]),
 				     BL_TO_FORTRAN(uface[1]),
 				     BL_TO_FORTRAN(uface[2])),
