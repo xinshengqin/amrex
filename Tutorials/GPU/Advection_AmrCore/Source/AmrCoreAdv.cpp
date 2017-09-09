@@ -598,7 +598,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         intptr_t* m_tags = new intptr_t[n_fabs];
 #endif
 
-    BL_PROFILE_VAR("advect and data transfer", advect_transfer);
+    BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group", advect_group);
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
@@ -624,6 +624,11 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 
 	    const FArrayBox& statein = Sborder[mfi];
 	    FArrayBox& stateout      =   S_new[mfi];
+#ifdef CUDA
+            int idx = mfi.LocalIndex();
+            int dev_id = statein.deviceID();
+            m_tags[idx] = (intptr_t) &stateout;
+#endif
 
 	    // Allocate fabs for fluxes and Godunov velocities.
 	    // for (int i = 0; i < BL_SPACEDIM ; i++) {
@@ -637,22 +642,23 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	    // }
 
             // compute velocities on faces (prescribed function of space and time)
-            BL_PROFILE_VAR("get_face_velocity_", get_face_velocity_);
+	    // get_face_velocity(lev, ctr_time,
+	    //     	      AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
+	    //     		     BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
+	    //     		     BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
+	    //     	      dx, prob_lo
+#ifdef CUDA
+            //                   , idx, dev_id, m_tags[idx]
+#endif
+            //                   );
 	    get_face_velocity(lev, ctr_time,
 			      AMREX_D_DECL(BL_TO_FORTRAN(ufaces[0][mfi]),
 				     BL_TO_FORTRAN(ufaces[1][mfi]),
 				     BL_TO_FORTRAN(ufaces[2][mfi])),
 			      dx, prob_lo);
-            BL_PROFILE_VAR_STOP(get_face_velocity_);
 
 #ifdef CUDA
-            int idx = mfi.LocalIndex();
-            int dev_id = statein.deviceID();
-            if (my_verbose)
-                std::cout << "Processing FAB: " << idx << std::endl;
-            m_tags[idx] = (intptr_t) &stateout;
-            if (my_verbose)
-                std::cout << "stateout in this FAB is at address: " << m_tags[idx] << std::endl;
+
 #ifdef _OPENMP
 #pragma omp critical
 #endif
@@ -690,8 +696,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             // add callback function to CUDA stream associated with idx
             cudaStream_t pStream;
             get_stream(&idx, &pStream, &dev_id);
-            if (my_verbose)
-                 std::cout << "Add callback to CUDA stream associated with tag: " << m_tags[idx] << std::endl;
             cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
 #else
             // compute new state (stateout) and fluxes.
@@ -718,6 +722,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	}
     }
 #ifdef CUDA
+    // TODO: put this in destructor
     // synchronize all devices
     int n_dev = ParallelDescriptor::get_num_devices_used();
     for (int i = 0; i < n_dev; ++i) {
@@ -725,7 +730,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         checkCudaErrors(cudaDeviceSynchronize());
     }
 #endif
-    BL_PROFILE_VAR_STOP(advect_transfer);
+    BL_PROFILE_VAR_STOP(advect_group);
 
 #ifdef CUDA
     delete[] m_tags;
@@ -811,27 +816,16 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 	{
 	    for (int i = 0; i < BL_SPACEDIM ; i++) {
 		const Box& bx = mfi.nodaltilebox(i);
-// #ifdef CUDA
-// 		uface[i].setDevice(S_new[mfi].deviceID());
-// #endif
 		uface[i].resize(bx,1);
 	    }
 
-// #ifdef _OPENMP
-// #pragma omp critical
-//             if (my_verbose) {
-//                 std::cout << "Thread " << omp_get_thread_num() << " calls EstTimeStep::get_face_velocity() with: " << std::endl;
-//                 std::cout << "uface[0].dataPtr:" << uface[0].dataPtr() << std::endl;
-//                 std::cout << "uface[1].dataPtr:" << uface[1].dataPtr() << std::endl;
-//                 std::cout << "uface[2].dataPtr:" << uface[2].dataPtr() << std::endl;
-//             }
-// #endif
 	    get_face_velocity(lev, cur_time,
 			      AMREX_D_DECL(BL_TO_FORTRAN(uface[0]),
 				     BL_TO_FORTRAN(uface[1]),
 				     BL_TO_FORTRAN(uface[2])),
 			      dx, prob_lo);
 
+            // TODO: do this on GPU
 	    for (int i = 0; i < BL_SPACEDIM; ++i) {
 		Real umax = uface[i].norm(0);
 		if (umax > 1.e-100) {
