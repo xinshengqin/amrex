@@ -71,7 +71,9 @@ private:
 
 };
 
+#ifdef CUDA
 extern cublasHandle_t* cublasHandles;
+#endif
 
 }
 

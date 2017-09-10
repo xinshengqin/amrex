@@ -544,6 +544,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
     MultiFab Sborder(grids[lev], dmap[lev], S_new.nComp(), num_grow);
     FillPatch(lev, time, Sborder, 0, Sborder.nComp());
 
+    BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group",advect_group); 
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
@@ -590,6 +591,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	    }
 	}
     }
+    BL_PROFILE_VAR_STOP(advect_group); 
 
     // increment or decrement the flux registers by area and time-weighted fluxes
     // Note that the fluxes have already been scaled by dt and area
