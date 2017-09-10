@@ -35,15 +35,15 @@ ifeq ($(DEBUG),TRUE)
 
   # 2016-12-02: pgi 16.10 doesn't appear to like -traceback together with c++11
 
-  CXXFLAGS += -G -Xptxas=-v -Xcompiler='-g -O0 -Mbounds'
-  CFLAGS   += -G -Xptxas=-v -Xcompiler='-g -O0 -Mbounds'
-  FFLAGS   += -g -O0 -Mbounds -Ktrap=divz,inv -Mchkptr
-  F90FLAGS += -g -O0 -Mbounds -Ktrap=divz,inv -Mchkptr
+  CXXFLAGS += -g -G -lineinfo --relocatable-device-code=true -Xcompiler='-g -ggdb -O0'
+  CFLAGS   += -g -G -lineinfo --relocatable-device-code=true -Xcompiler='-g -ggdb -O0'
+  FFLAGS   += -g -O0 -Mbounds -Mcuda=cuda7.5 -Mnomain -Mcuda=lineinfo -Mcuda=rdc
+  F90FLAGS += -g -O0 -Mbounds -Mcuda=cuda7.5 -Mnomain -Mcuda=lineinfo -Mcuda=rdc
 
 else
 
-  CXXFLAGS += -lineinfo --relocatable-device-code=true -Xcompiler='-g -O3'
-  CFLAGS   += -lineinfo --relocatable-device-code=true -Xcompiler='-g -O3'
+  CXXFLAGS += -lineinfo --relocatable-device-code=true -Xcompiler='-O3'
+  CFLAGS   += -lineinfo --relocatable-device-code=true -Xcompiler='-O3'
   FFLAGS   += -gopt -fast -Mcuda=cuda7.5 -Mnomain -Mcuda=lineinfo -Mcuda=rdc
   F90FLAGS += -gopt -fast -Mcuda=cuda7.5 -Mnomain -Mcuda=lineinfo -Mcuda=rdc
 
@@ -82,6 +82,8 @@ override XTRALIBS += -pgf90libs -L /sw/summitdev/gcc/5.4.0new/lib64/ -latomic -l
 else 
     ifeq ($(which_computer),$(filter $(which_computer),titan))
         override XTRALIBS += -pgf90libs -latomic -lquadmath -lstdc++
+        FFLAGS   += -ta=tesla,cc35
+        F90FLAGS += -ta=tesla,cc35
 	CXXFLAGS += --generate-code arch=compute_35,code=sm_35 
 	CFLAGS   += --generate-code arch=compute_35,code=sm_35 
     else		
