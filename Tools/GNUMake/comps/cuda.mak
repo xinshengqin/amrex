@@ -14,8 +14,8 @@ ifeq ($(USE_MPI),TRUE)
     CXXFLAGS = -Wno-deprecated-gpu-targets -x cu --std=c++11 -ccbin=mpic++ -O3
     CFLAGS   = -Wno-deprecated-gpu-targets -x c -ccbin=mpicc -c99 -O3
 else
-    CXXFLAGS = -Wno-deprecated-gpu-targets -x cu -std=c++11 -ccbin=g++ -O3
-    CFLAGS   = -Wno-deprecated-gpu-targets -x c -c99 -ccbin=gcc -O3 
+    CXXFLAGS = -Wno-deprecated-gpu-targets -x cu -std=c++11 -ccbin=g++ -O3 --cudart=static
+    CFLAGS   = -Wno-deprecated-gpu-targets -x c -c99 -ccbin=gcc -O3 --cudart=static
 endif 
 
 # other options 
@@ -82,6 +82,7 @@ override XTRALIBS += -pgf90libs -L /sw/summitdev/gcc/5.4.0new/lib64/ -latomic -l
 else 
     ifeq ($(which_computer),$(filter $(which_computer),titan))
         override XTRALIBS += -pgf90libs -latomic -lquadmath -lstdc++
+        override XTRALIBS += -lcublas_static -lculibos
         FFLAGS   += -ta=tesla,cc35
         F90FLAGS += -ta=tesla,cc35
 	CXXFLAGS += --generate-code arch=compute_35,code=sm_35 
