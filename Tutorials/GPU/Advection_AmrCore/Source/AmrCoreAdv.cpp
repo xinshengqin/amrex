@@ -661,19 +661,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 #endif
             {
                 statein.toDevice(idx);
-                // for (int d = 0; d < BL_SPACEDIM ; d++) {
-                //     ufaces[d][mfi].toDevice(idx);
-                // }
-    //             advect(time, bx.loVect(), bx.hiVect(),
-    // 		   BL_TO_FORTRAN_3D_DEVICE(statein), 
-    // 		   BL_TO_FORTRAN_3D_DEVICE(stateout),
-    // 		   AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(uface[0]),
-    // 			  BL_TO_FORTRAN_3D_DEVICE(uface[1]),
-    // 			  BL_TO_FORTRAN_3D_DEVICE(uface[2])),
-    // 		   AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(flux[0]), 
-    // 			  BL_TO_FORTRAN_3D_DEVICE(flux[1]), 
-    // 			  BL_TO_FORTRAN_3D_DEVICE(flux[2])), 
-    // 		   dx, dt, idx, dev_id);
                 advect(time, bx.loVect(), bx.hiVect(),
                        BL_TO_FORTRAN_3D_DEVICE(statein), 
                        BL_TO_FORTRAN_3D_DEVICE(stateout),
@@ -687,7 +674,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             }
             stateout.toHost(idx);
             for (int d = 0; d < BL_SPACEDIM ; d++) {
-                // flux[d].toHost(idx);
                 fluxes[d][mfi].toHost(idx);
             }
             // add callback function to CUDA stream associated with idx
@@ -708,12 +694,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 			  BL_TO_FORTRAN_3D(fluxes[2][mfi])), 
 		   dx, dt);
 #endif
-
-	    // if (do_reflux) {
-	    //     for (int i = 0; i < BL_SPACEDIM ; i++) {
-	    //         fluxes[i][mfi].copy(flux[i],mfi.nodaltilebox(i));	  
-	    //     }
-	    // }
 
 
 	}
@@ -822,28 +802,14 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
         ufaces[i].define(ba, dmap[lev], S_new.nComp(), 0, mfinfo);
     }
 
-    //TODO: move this to AMReX.cpp
-    cublasStatus_t status;
-    cublasHandle_t handle;
-    status = cublasCreate(&handle);
-    if (status != CUBLAS_STATUS_SUCCESS)
-    {
-        amrex::Error("!!!! CUBLAS initialization error\n");
-    }
-
 
 #ifdef _OPENMP
 #pragma omp parallel reduction(min:dt_est)
 #endif
     {
-	// FArrayBox uface[BL_SPACEDIM];
 
 	for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi)
 	{
-	    // for (int i = 0; i < BL_SPACEDIM ; i++) {
-	    //     const Box& bx = mfi.nodaltilebox(i);
-	    //     uface[i].resize(bx,1);
-	    // }
 #ifdef CUDA
             int idx = mfi.LocalIndex();
             int dev_id = ufaces[0][mfi].deviceID();
@@ -868,7 +834,6 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 				     BL_TO_FORTRAN(ufaces[1][mfi]),
 				     BL_TO_FORTRAN(ufaces[2][mfi])),
 			      dx, prob_lo);
-            // TODO: do this on GPU
 	    for (int i = 0; i < BL_SPACEDIM; ++i) {
 		Real umax = ufaces[i][mfi].norm(0);
 		// Real umax = ufaces[i][mfi].norm_device(0);
@@ -881,41 +846,28 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 	}
     }
 #ifdef CUDA
-    // TODO: put this in destructor
     // synchronize all devices
     int n_dev = ParallelDescriptor::get_num_devices_used();
     for (int i = 0; i < n_dev; ++i) {
         checkCudaErrors(cudaSetDevice(i));
         checkCudaErrors(cudaDeviceSynchronize());
     }
-    // todo: maybe can replace this with cudaMemcpySymbol
     Real* umax = (Real*) malloc(1 * sizeof(Real));
     for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi) {
         // compute norm of this fab on GPU
         for (int i = 0; i < BL_SPACEDIM; ++i) {
             int max_id = -1;
-            // TODO: USE NON-default stream
             // assume we only have one component in the FAB now
-            status = cublasIdamax(handle, ufaces[i][mfi].nPts(), ufaces[i][mfi].devicePtr(), 1, &max_id);
+            // assume we use only one GPU
+            BL_ASSERT(ParallelDescriptor::get_num_devices_used() == 0);
+            cublasIdamax(cublasHandles[0], ufaces[i][mfi].nPts(), ufaces[i][mfi].devicePtr(), 1, &max_id);
             checkCudaErrors(cudaMemcpy(umax, &((ufaces[i][mfi].devicePtr())[max_id]), 1*sizeof(Real),cudaMemcpyDeviceToHost));
             if (*umax > 1.e-100) {
                 dt_est = std::min(dt_est, dx[i] / (*umax));
             }
         }
-        // for (int i = 0; i < BL_SPACEDIM; ++i) {
-        //     Real umax = ufaces[i][mfi].norm(0);
-        //     // Real umax = ufaces[i][mfi].norm_device(0);
-        //     if (umax > 1.e-100) {
-        //         dt_est = std::min(dt_est, dx[i] / umax);
-        //     }
-        // }
     }
     delete[] m_tags;
-    status = cublasDestroy(handle);
-    if (status != CUBLAS_STATUS_SUCCESS)
-    {
-        amrex::Error("!!!! cuBLAS shutdown error (A)\n");
-    }
 #endif
 
     if (!local) {

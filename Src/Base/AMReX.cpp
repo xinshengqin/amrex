@@ -415,10 +415,20 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse,
 #else
     checkCudaErrors(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte));
 #endif
+    // initialize cuBLAS handles for each devices used
+    cublasHandles = new cublasHandle_t[ParallelDescriptor::nDevices_used];
+    cublasStatus_t status;
+    for (int i = 0; i < ParallelDescriptor::nDevices_used; ++i) {
+        cudaSetDevice(i);
+        status = cublasCreate(&(cublasHandles[i]));
+        if (status != CUBLAS_STATUS_SUCCESS)
+        {
+            amrex::Abort("CUBLAS initialization error\n");
+        }
+    }
 
     // Initialize CUDA streams in fortran subroutine.
     initialize_cuda();
-
 
     amrex::Print() << "CUDA initialized.\n";
 #endif // CUDA
@@ -538,6 +548,7 @@ amrex::Finalize (bool finalize_parallel)
 
 // clean up CUDA staff
 #ifdef CUDA
+    delete[] cublasHandles;
     // Fortran side clean up
     finalize_cuda();
     // cudaDeviceReset causes the driver to clean up all state. While

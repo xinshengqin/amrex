@@ -6,6 +6,7 @@
 #include "AMReX_REAL.H"
 #ifdef CUDA
 #include <cuda_runtime.h>
+#include <cublas_v2.h>
 #endif
 
 #ifdef CUDA
@@ -69,6 +70,8 @@ private:
     static int cuda_device_id;
 
 };
+
+extern cublasHandle_t* cublasHandles;
 
 }
 
