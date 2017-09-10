@@ -13,6 +13,7 @@
 #ifdef CUDA
 #include <cuda_runtime_api.h>
 #include <AMReX_MemPool.H>
+#include <cublas_v2.h>
 #endif
 
 using namespace amrex;
@@ -821,6 +822,15 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
         ufaces[i].define(ba, dmap[lev], S_new.nComp(), 0, mfinfo);
     }
 
+    //TODO: move this to AMReX.cpp
+    cublasStatus_t status;
+    cublasHandle_t handle;
+    status = cublasCreate(&handle);
+    if (status != CUBLAS_STATUS_SUCCESS)
+    {
+        amrex::Error("!!!! CUBLAS initialization error\n");
+    }
+
 
 #ifdef _OPENMP
 #pragma omp parallel reduction(min:dt_est)
@@ -848,9 +858,6 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 	        	      dx, prob_lo
                               , idx, dev_id, m_tags[idx]
                               );
-            for (int d = 0; d < BL_SPACEDIM ; d++) {
-                ufaces[d][mfi].toHost(idx);
-            }
             // add callback function to CUDA stream associated with idx
             cudaStream_t pStream;
             get_stream(&idx, &pStream, &dev_id);
@@ -881,15 +888,33 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
         checkCudaErrors(cudaSetDevice(i));
         checkCudaErrors(cudaDeviceSynchronize());
     }
-    delete[] m_tags;
+    // todo: maybe can replace this with cudaMemcpySymbol
+    Real* umax = (Real*) malloc(1 * sizeof(Real));
     for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi) {
+        // compute norm of this fab on GPU
         for (int i = 0; i < BL_SPACEDIM; ++i) {
-            Real umax = ufaces[i][mfi].norm(0);
-            // Real umax = ufaces[i][mfi].norm_device(0);
-            if (umax > 1.e-100) {
-                dt_est = std::min(dt_est, dx[i] / umax);
+            int max_id = -1;
+            // TODO: USE NON-default stream
+            // assume we only have one component in the FAB now
+            status = cublasIdamax(handle, ufaces[i][mfi].nPts(), ufaces[i][mfi].devicePtr(), 1, &max_id);
+            checkCudaErrors(cudaMemcpy(umax, &((ufaces[i][mfi].devicePtr())[max_id]), 1*sizeof(Real),cudaMemcpyDeviceToHost));
+            if (*umax > 1.e-100) {
+                dt_est = std::min(dt_est, dx[i] / (*umax));
             }
         }
+        // for (int i = 0; i < BL_SPACEDIM; ++i) {
+        //     Real umax = ufaces[i][mfi].norm(0);
+        //     // Real umax = ufaces[i][mfi].norm_device(0);
+        //     if (umax > 1.e-100) {
+        //         dt_est = std::min(dt_est, dx[i] / umax);
+        //     }
+        // }
+    }
+    delete[] m_tags;
+    status = cublasDestroy(handle);
+    if (status != CUBLAS_STATUS_SUCCESS)
+    {
+        amrex::Error("!!!! cuBLAS shutdown error (A)\n");
     }
 #endif
 
