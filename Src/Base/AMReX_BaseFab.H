@@ -1257,7 +1257,6 @@ template <class T>
 void
 BaseFab<T>::define ()
 {
-    const bool my_verbose = false;
     BL_ASSERT(nvar > 0);
     BL_ASSERT(dptr == 0);
     BL_ASSERT(dptr_d == 0);
@@ -1267,25 +1266,14 @@ BaseFab<T>::define ()
     truesize  = nvar*numpts;
 #ifdef CUDA
     if (pinned_memory) {
-        BL_PROFILE_VAR("Allocate pinned CPU memory in BaseFab<T>::define()",alloc_pinned_cpu);
         // dptr      = static_cast<T*>(amrex::The_Arena()->alloc_pinned(truesize*sizeof(T)));
         dptr = static_cast<T*>(amrex_mempool_alloc_pinned(truesize*sizeof(T)));
-        BL_PROFILE_VAR_STOP(alloc_pinned_cpu);
     }
     else {
-        BL_PROFILE_VAR("Allocate regular CPU memory in BaseFab<T>::define()",alloc_regular_cpu);
         dptr      = static_cast<T*>(amrex::The_Arena()->alloc(truesize*sizeof(T)));
-        BL_PROFILE_VAR_STOP(alloc_regular_cpu);
-        // TODO:
-        if (my_verbose) {
-            std::cout << "Allocate regular CPU memory in BaseFab<T>::define()" << std::endl;
-            std::cout << "Get memory at:" << dptr << std::endl;
-        }
     }
 #else
-    BL_PROFILE_VAR("Allocate regular CPU memory in BaseFab<T>::define()",alloc_regular_cpu);
     dptr      = static_cast<T*>(amrex::The_Arena()->alloc(truesize*sizeof(T)));
-    BL_PROFILE_VAR_STOP(alloc_regular_cpu);
 #endif
     ptr_owner = true;
     //
@@ -1482,7 +1470,6 @@ BaseFab<T>::resize (const Box& b,
 template <class T>
 void
 BaseFab<T>::allocate_device() {
-    BL_PROFILE("Allocate GPU memory in BaseFab<T>::allocate_device()");
 
 #ifdef CUDA
     BL_ASSERT(device_id >= 0);
@@ -1523,28 +1510,20 @@ BaseFab<T>::clear ()
 	    }
 #ifdef CUDA
             if (pinned_memory) {
-                BL_PROFILE_VAR("Free pinned CPU memory in BaseFab<T>::clear()",free_pinned_cpu);
                 // amrex::The_Arena()->free_pinned(dptr);
                 amrex_mempool_free_pinned(dptr);
-                BL_PROFILE_VAR_STOP(free_pinned_cpu);
             }
             else {
-                BL_PROFILE_VAR("Free regular CPU memory in BaseFab<T>::clear()",free_regular_cpu);
                 amrex::The_Arena()->free(dptr);
-                BL_PROFILE_VAR_STOP(free_regular_cpu);
             }
 #else
-            BL_PROFILE_VAR("Free regular CPU memory in BaseFab<T>::clear()",free_regular_cpu);
             amrex::The_Arena()->free(dptr);
-            BL_PROFILE_VAR_STOP(free_regular_cpu);
 #endif
 
 	    if (dptr_d && device_copy) {
 #ifdef CUDA
-                BL_PROFILE_VAR("Free GPU memory in BaseFab<T>::clear()",free_gpu);
 		// amrex::The_Arena()->free_device(dptr_d, device_id);
                 amrex_mempool_free_gpu(dptr_d, device_id);
-                BL_PROFILE_VAR_STOP(free_gpu);
 #endif
             }
 	    

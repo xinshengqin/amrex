@@ -1071,7 +1071,6 @@ FabArray<FAB>::AllocFabs (const FabFactory<FAB>& factory, const MFInfo& info)
         fab_info.useDevice(deviceArray[i]);
 #endif
         m_fabs_v.push_back(factory.create(tmpbox, n_comp, fab_info, K));
-        // amrex::Print() << "Fab " << i << " is allocated on device " << deviceArray[i] << std::endl;
     }
     
 #ifdef BL_USE_TEAM

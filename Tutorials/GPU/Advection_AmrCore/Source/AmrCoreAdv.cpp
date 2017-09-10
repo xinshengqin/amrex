@@ -627,7 +627,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 #ifdef CUDA
             int idx = mfi.LocalIndex();
             int dev_id = statein.deviceID();
-            m_tags[idx] = (intptr_t) &stateout;
+            m_tags[idx] = (intptr_t) &(S_new[mfi]);
 #endif
 
 	    // Allocate fabs for fluxes and Godunov velocities.
@@ -725,12 +725,10 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         checkCudaErrors(cudaSetDevice(i));
         checkCudaErrors(cudaDeviceSynchronize());
     }
+    delete[] m_tags;
 #endif
     BL_PROFILE_VAR_STOP(advect_group);
 
-#ifdef CUDA
-    delete[] m_tags;
-#endif
 
     // increment or decrement the flux registers by area and time-weighted fluxes
     // Note that the fluxes have already been scaled by dt and area
@@ -802,34 +800,98 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
     const Real cur_time = t_new[lev];
     const MultiFab& S_new = *phi_new[lev];
 
+#ifdef CUDA
+    // store tag for each fab here
+    int n_fabs = S_new.size();
+    intptr_t* m_tags = new intptr_t[n_fabs];
+#endif
+
+    MultiFab ufaces[BL_SPACEDIM];
+    for (int i = 0; i < BL_SPACEDIM; ++i)
+    {
+        BoxArray ba = grids[lev];
+        ba.surroundingNodes(i);
+        MFInfo mfinfo;
+#ifdef CUDA
+        mfinfo.SetDevice(true);
+#else
+        mfinfo.SetDevice(false);
+#endif
+        ba.grow(1);
+        ufaces[i].define(ba, dmap[lev], S_new.nComp(), 0, mfinfo);
+    }
+
+
 #ifdef _OPENMP
 #pragma omp parallel reduction(min:dt_est)
 #endif
     {
-	FArrayBox uface[BL_SPACEDIM];
+	// FArrayBox uface[BL_SPACEDIM];
 
 	for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi)
 	{
-	    for (int i = 0; i < BL_SPACEDIM ; i++) {
-		const Box& bx = mfi.nodaltilebox(i);
-		uface[i].resize(bx,1);
-	    }
+	    // for (int i = 0; i < BL_SPACEDIM ; i++) {
+	    //     const Box& bx = mfi.nodaltilebox(i);
+	    //     uface[i].resize(bx,1);
+	    // }
+#ifdef CUDA
+            int idx = mfi.LocalIndex();
+            int dev_id = ufaces[0][mfi].deviceID();
+            m_tags[idx] = (intptr_t) &(S_new[mfi]);
+#endif
 
+#ifdef CUDA
+	    get_face_velocity(lev, cur_time,
+	        	      AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
+	        		     BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
+	        		     BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
+	        	      dx, prob_lo
+                              , idx, dev_id, m_tags[idx]
+                              );
+            for (int d = 0; d < BL_SPACEDIM ; d++) {
+                ufaces[d][mfi].toHost(idx);
+            }
+            // add callback function to CUDA stream associated with idx
+            cudaStream_t pStream;
+            get_stream(&idx, &pStream, &dev_id);
+            cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
+#else
 	    get_face_velocity_host(lev, cur_time,
-			      AMREX_D_DECL(BL_TO_FORTRAN(uface[0]),
-				     BL_TO_FORTRAN(uface[1]),
-				     BL_TO_FORTRAN(uface[2])),
+			      AMREX_D_DECL(BL_TO_FORTRAN(ufaces[0][mfi]),
+				     BL_TO_FORTRAN(ufaces[1][mfi]),
+				     BL_TO_FORTRAN(ufaces[2][mfi])),
 			      dx, prob_lo);
-
             // TODO: do this on GPU
 	    for (int i = 0; i < BL_SPACEDIM; ++i) {
-		Real umax = uface[i].norm(0);
+		Real umax = ufaces[i][mfi].norm(0);
+		// Real umax = ufaces[i][mfi].norm_device(0);
 		if (umax > 1.e-100) {
 		    dt_est = std::min(dt_est, dx[i] / umax);
 		}
 	    }
+#endif
+
 	}
     }
+#ifdef CUDA
+    // TODO: put this in destructor
+    // synchronize all devices
+    int n_dev = ParallelDescriptor::get_num_devices_used();
+    for (int i = 0; i < n_dev; ++i) {
+        checkCudaErrors(cudaSetDevice(i));
+        checkCudaErrors(cudaDeviceSynchronize());
+    }
+    delete[] m_tags;
+    for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi) {
+        for (int i = 0; i < BL_SPACEDIM; ++i) {
+            Real umax = ufaces[i][mfi].norm(0);
+            // Real umax = ufaces[i][mfi].norm_device(0);
+            if (umax > 1.e-100) {
+                dt_est = std::min(dt_est, dx[i] / umax);
+            }
+        }
+    }
+#endif
 
     if (!local) {
 	ParallelDescriptor::ReduceRealMin(dt_est);

@@ -75,10 +75,12 @@ module mempool_module
   end interface
 
   interface gpu_allocate_hold
+     module procedure gpu_allocate_r2_hold
      module procedure gpu_allocate_r3_hold
   end interface
 
   interface gpu_deallocate
+     module procedure gpu_deallocate_r2
      module procedure gpu_deallocate_r3
   end interface
 
@@ -589,6 +591,34 @@ contains
   end subroutine bl_deallocate_i3
 
 #ifdef CUDA
+
+  subroutine gpu_allocate_r2_hold(a, tag, dev_id, lo1, hi1, lo2, hi2)
+    use cudafor
+    real(c_real), pointer, device, intent(inout) :: a(:,:)
+    integer, intent(in) :: lo1, hi1, lo2, hi2
+    integer, intent(in) :: dev_id
+    integer (kind=c_size_t) :: dev_id_c
+    integer (kind=c_intptr_t), intent(in) :: tag
+    integer :: n1, n2
+    integer (kind=c_size_t) :: sz
+    type(c_devptr) :: cp
+    real(c_real), pointer, device :: fp(:,:)
+    n1 = max(hi1-lo1+1, 1)
+    n2 = max(hi2-lo2+1, 1)
+    sz = int(n1,c_size_t) * int(n2,c_size_t)
+    dev_id_c = int(dev_id,c_size_t)
+    cp = amrex_mempool_alloc_gpu_hold(szr*sz, tag, dev_id_c)
+    call c_f_pointer(cp, fp, shape=(/n1,n2/))
+    call shift_bound_d2(fp, lo1, lo2, a)
+    contains
+      subroutine shift_bound_d2(fp, lo1, lo2, a)
+        integer, intent(in) :: lo1, lo2
+        real(c_real), target,  device, intent(in) :: fp(lo1:,lo2:)
+        real(c_real), pointer, device, intent(inout) :: a(:,:)
+        a => fp
+      end subroutine shift_bound_d2
+  end subroutine gpu_allocate_r2_hold
+
   subroutine gpu_allocate_r3(a, dev_id, lo1, hi1, lo2, hi2, lo3, hi3)
     use cudafor
     real(c_real), pointer, device, intent(inout) :: a(:,:,:)
@@ -645,6 +675,20 @@ contains
         a => fp
       end subroutine shift_bound_d3
   end subroutine gpu_allocate_r3_hold
+
+  subroutine gpu_deallocate_r2(a, dev_id)
+    use cudafor
+    real(c_real), pointer, device, intent(inout) :: a(:,:)
+    integer, intent(in) :: dev_id
+    integer (kind=c_size_t) :: dev_id_c
+    integer :: lo(2)
+    type(c_devptr) :: cp
+    lo = lbound(a)
+    cp = c_devloc(a(lo(1),lo(2)))
+    dev_id_c = int(dev_id,c_size_t)
+    call amrex_mempool_free_gpu(cp, dev_id_c)
+    a => Null()
+  end subroutine gpu_deallocate_r2
 
   subroutine gpu_deallocate_r3(a, dev_id)
     use cudafor
