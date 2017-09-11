@@ -643,23 +643,22 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	    // }
 
             // compute velocities on faces (prescribed function of space and time)
-	    get_face_velocity(lev, ctr_time,
-	        	      AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
-	        		     BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
-	        		     BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
-	        	      dx, prob_lo
-#ifdef CUDA
-                              , idx, dev_id, m_tags[idx]
-#endif
-                              );
-
-
-#ifdef CUDA
-
 #ifdef _OPENMP
 #pragma omp critical
 #endif
             {
+                get_face_velocity(lev, ctr_time,
+                                  AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
+                                         BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
+                                         BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
+                                  dx, prob_lo
+#ifdef CUDA
+                                  , idx, dev_id, m_tags[idx]
+#endif
+                                  );
+
+
+#ifdef CUDA
                 statein.toDevice(idx);
                 advect(time, bx.loVect(), bx.hiVect(),
                        BL_TO_FORTRAN_3D_DEVICE(statein), 
@@ -671,29 +670,29 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                               BL_TO_FORTRAN_3D_DEVICE(fluxes[1][mfi]), 
                               BL_TO_FORTRAN_3D_DEVICE(fluxes[2][mfi])), 
                        dx, dt, idx, dev_id, m_tags[idx]);
-            }
-            stateout.toHost(idx);
-            for (int d = 0; d < BL_SPACEDIM ; d++) {
-                fluxes[d][mfi].toHost(idx);
-            }
-            // add callback function to CUDA stream associated with idx
-            cudaStream_t pStream;
-            get_stream(&idx, &pStream, &dev_id);
-            cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
+                stateout.toHost(idx);
+                for (int d = 0; d < BL_SPACEDIM ; d++) {
+                    fluxes[d][mfi].toHost(idx);
+                }
+                // add callback function to CUDA stream associated with idx
+                cudaStream_t pStream;
+                get_stream(&idx, &pStream, &dev_id);
+                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
 #else
             // compute new state (stateout) and fluxes.
-            int idx = mfi.LocalIndex();
-            advect(time, bx.loVect(), bx.hiVect(),
-		   BL_TO_FORTRAN_3D(statein), 
-		   BL_TO_FORTRAN_3D(stateout),
-		   AMREX_D_DECL(BL_TO_FORTRAN_3D(ufaces[0][mfi]),
-			  BL_TO_FORTRAN_3D(ufaces[1][mfi]),
-			  BL_TO_FORTRAN_3D(ufaces[2][mfi])),
-		   AMREX_D_DECL(BL_TO_FORTRAN_3D(fluxes[0][mfi]), 
-			  BL_TO_FORTRAN_3D(fluxes[1][mfi]), 
-			  BL_TO_FORTRAN_3D(fluxes[2][mfi])), 
-		   dx, dt);
+                int idx = mfi.LocalIndex();
+                advect(time, bx.loVect(), bx.hiVect(),
+                       BL_TO_FORTRAN_3D(statein), 
+                       BL_TO_FORTRAN_3D(stateout),
+                       AMREX_D_DECL(BL_TO_FORTRAN_3D(ufaces[0][mfi]),
+                              BL_TO_FORTRAN_3D(ufaces[1][mfi]),
+                              BL_TO_FORTRAN_3D(ufaces[2][mfi])),
+                       AMREX_D_DECL(BL_TO_FORTRAN_3D(fluxes[0][mfi]), 
+                              BL_TO_FORTRAN_3D(fluxes[1][mfi]), 
+                              BL_TO_FORTRAN_3D(fluxes[2][mfi])), 
+                       dx, dt);
 #endif
+            }
 
 
 	}
@@ -808,7 +807,13 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 #endif
     {
 
+
+#ifdef CUDA
+        // MFIter, tiling = false, use_device = true
+	for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi)
+#else
 	for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi)
+#endif
 	{
 #ifdef CUDA
             int idx = mfi.LocalIndex();
@@ -816,32 +821,37 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
             m_tags[idx] = (intptr_t) &(S_new[mfi]);
 #endif
 
-#ifdef CUDA
-	    get_face_velocity(lev, cur_time,
-	        	      AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
-	        		     BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
-	        		     BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
-	        	      dx, prob_lo
-                              , idx, dev_id, m_tags[idx]
-                              );
-            // add callback function to CUDA stream associated with idx
-            cudaStream_t pStream;
-            get_stream(&idx, &pStream, &dev_id);
-            cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
-#else
-	    get_face_velocity_host(lev, cur_time,
-			      AMREX_D_DECL(BL_TO_FORTRAN(ufaces[0][mfi]),
-				     BL_TO_FORTRAN(ufaces[1][mfi]),
-				     BL_TO_FORTRAN(ufaces[2][mfi])),
-			      dx, prob_lo);
-	    for (int i = 0; i < BL_SPACEDIM; ++i) {
-		Real umax = ufaces[i][mfi].norm(0);
-		// Real umax = ufaces[i][mfi].norm_device(0);
-		if (umax > 1.e-100) {
-		    dt_est = std::min(dt_est, dx[i] / umax);
-		}
-	    }
+#ifdef _OPENMP
+#pragma omp critical
 #endif
+            {
+#ifdef CUDA
+                get_face_velocity(lev, cur_time,
+                                  AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
+                                         BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
+                                         BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
+                                  dx, prob_lo
+                                  , idx, dev_id, m_tags[idx]
+                                  );
+                // add callback function to CUDA stream associated with idx
+                cudaStream_t pStream;
+                get_stream(&idx, &pStream, &dev_id);
+                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
+#else
+                get_face_velocity_host(lev, cur_time,
+                                  AMREX_D_DECL(BL_TO_FORTRAN(ufaces[0][mfi]),
+                                         BL_TO_FORTRAN(ufaces[1][mfi]),
+                                         BL_TO_FORTRAN(ufaces[2][mfi])),
+                                  dx, prob_lo);
+                for (int i = 0; i < BL_SPACEDIM; ++i) {
+                    Real umax = ufaces[i][mfi].norm(0);
+                    // Real umax = ufaces[i][mfi].norm_device(0);
+                    if (umax > 1.e-100) {
+                        dt_est = std::min(dt_est, dx[i] / umax);
+                    }
+                }
+#endif
+            }
 
 	}
     }

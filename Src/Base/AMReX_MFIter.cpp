@@ -9,6 +9,7 @@
 #include <cuda_runtime_api.h>
 #include <AMReX_CUDA_helper.H>
 #include <nvToolsExt.h>
+#include <cmath>
 #endif
 
 namespace amrex {
@@ -136,20 +137,21 @@ MFIter::~MFIter ()
     if ( ! (flags & NoTeamBarrier) )
 	ParallelDescriptor::MyTeam().MemoryBarrier();
 #endif
-// #ifdef CUDA
-// #ifdef _OPENMP
-// #pragma omp barrier
-// #pragma omp single
-// #endif
-//     if (use_device) {
-//         // synchronize all devices
-//         int n_dev = ParallelDescriptor::get_num_devices_used();
-//         for (int i = 0; i < n_dev; ++i) {
-//             checkCudaErrors(cudaSetDevice(i));
-//             checkCudaErrors(cudaDeviceSynchronize());
-//         }
-//     }
-// #endif
+
+#ifdef CUDA
+#ifdef _OPENMP
+#pragma omp barrier
+#pragma omp single
+#endif
+    if (use_device) {
+        // synchronize all devices
+        int n_dev = ParallelDescriptor::get_num_devices_used();
+        for (int i = 0; i < n_dev; ++i) {
+            checkCudaErrors(cudaSetDevice(i));
+            checkCudaErrors(cudaDeviceSynchronize());
+        }
+    }
+#endif
     // releaseDeviceData();
 }
 
@@ -218,6 +220,7 @@ MFIter::Initialize ()
 	int nthreads = omp_get_num_threads();
 	if (nthreads > 1)
 	{
+#ifndef CUDA
 	    int tid = omp_get_thread_num();
 	    int ntot = endIndex - beginIndex;
 	    int nr   = ntot / nthreads;
@@ -229,25 +232,52 @@ MFIter::Initialize ()
 		beginIndex += tid * nr + nlft;
 		endIndex = beginIndex + nr;
 	    }	    
-            // // set device
-            // int device_count;  
-            // checkCudaErrors(cudaGetDeviceCount(&device_count));
-            // if (device_count == 0)
-            // {
-            //     amrex::Error("no devices supporting CUDA.\n");
-            // }
-            // int device_id = tid%device_count;
-            // std::string name = "OpenMP thread " + std::to_string(tid);
-            // checkCudaErrors(cudaSetDevice(device_id));
-            // // checkCudaErrors(cudaGetDevice(&gpu_id));
-            // // printf("CPU thread %d (of %d) uses CUDA device %d\n", cpu_thread_id, num_cpu_threads, gpu_id);
-            // // name the thread for NVVP
-            // nvtxNameOsThread(pthread_self(), name.c_str());
+#else
+            if (use_device) {
+                Real gpu_portion = 1; // change this to decide how many works should be assigned to GPU
+                int tid = omp_get_thread_num();
+                int ntot = endIndex - beginIndex;
+                int gpu_endIndex = std::floor(ntot*gpu_portion);
+                if ( 0 == tid) {
+                    beginIndex = 0;
+                    endIndex = gpu_endIndex;
+                }
+                else {
+                    // the rest of the OMP threads do it on CPU
+                    ntot = endIndex - gpu_endIndex;
+                    nthreads = nthreads - 1;
+                    tid = tid - 1;
+                    int nr   = ntot / nthreads;
+                    int nlft = ntot - nr * nthreads;
+                    if (tid < nlft) {  // get nr+1 items
+                        beginIndex += tid * (nr + 1) + gpu_endIndex;
+                        endIndex = beginIndex + nr + 1;
+                    } else {           // get nr items
+                        beginIndex += tid * nr + nlft + gpu_endIndex;
+                        endIndex = beginIndex + nr;
+                    }	    
+                }
+            } else {
+                int tid = omp_get_thread_num();
+                int ntot = endIndex - beginIndex;
+                int nr   = ntot / nthreads;
+                int nlft = ntot - nr * nthreads;
+                if (tid < nlft) {  // get nr+1 items
+                    beginIndex += tid * (nr + 1);
+                    endIndex = beginIndex + nr + 1;
+                } else {           // get nr items
+                    beginIndex += tid * nr + nlft;
+                    endIndex = beginIndex + nr;
+                }	    
+            }
+
+#endif
 	}
 #endif
 
 	currentIndex = beginIndex;
 #ifdef CUDA
+        // evenly assigned FABs to difference devices if more than one exists
         if (isValid()) {
             int device_used = fabArray.deviceArray[currentIndex];
             checkCudaErrors(cudaSetDevice(device_used));
