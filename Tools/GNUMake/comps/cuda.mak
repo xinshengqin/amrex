@@ -11,8 +11,10 @@ F90 = pgfortran
 
 
 ifeq ($(USE_MPI),TRUE)
-    CXXFLAGS = -Wno-deprecated-gpu-targets -x cu --std=c++11 -ccbin=mpic++ -O3
-    CFLAGS   = -Wno-deprecated-gpu-targets -x c -ccbin=mpicc -c99 -O3
+    # CXXFLAGS = -Wno-deprecated-gpu-targets -x cu --std=c++11 -ccbin=mpic++ -O3
+    # CFLAGS   = -Wno-deprecated-gpu-targets -x c -ccbin=mpicc -c99 -O3
+    CXXFLAGS = -Wno-deprecated-gpu-targets -x cu -std=c++11 -ccbin=g++ -O3 --cudart=static
+    CFLAGS   = -Wno-deprecated-gpu-targets -x c -c99 -ccbin=gcc -O3 --cudart=static
 else
     CXXFLAGS = -Wno-deprecated-gpu-targets -x cu -std=c++11 -ccbin=g++ -O3 --cudart=static
     CFLAGS   = -Wno-deprecated-gpu-targets -x c -c99 -ccbin=gcc -O3 --cudart=static
@@ -83,10 +85,18 @@ else
     ifeq ($(which_computer),$(filter $(which_computer),titan))
         override XTRALIBS += -pgf90libs -latomic -lquadmath -lstdc++
         override XTRALIBS += -lcublas_static -lculibos
+        CXXFLAGS += --generate-code arch=compute_35,code=sm_35 
+        CFLAGS   += --generate-code arch=compute_35,code=sm_35 
         FFLAGS   += -ta=tesla,cc35
         F90FLAGS += -ta=tesla,cc35
-	CXXFLAGS += --generate-code arch=compute_35,code=sm_35 
-	CFLAGS   += --generate-code arch=compute_35,code=sm_35 
+        ifeq ($(USE_MPI),TRUE)
+            override XTRALIBS += -L/opt/cray/mpt/7.5.2/gni/mpich-pgi/15.3/lib
+            override XTRALIBS += -lsci_pgi_mpi_mp -lmpich_pgi
+            CXXFLAGS += -I/opt/cray/mpt/7.5.2/gni/mpich-pgi/15.3/include
+            CFLAGS   += -I/opt/cray/mpt/7.5.2/gni/mpich-pgi/15.3/include
+            FFLAGS   += -I/opt/cray/mpt/7.5.2/gni/mpich-pgi/15.3/include
+            F90FLAGS += -I/opt/cray/mpt/7.5.2/gni/mpich-pgi/15.3/include
+	endif
     else		
         override XTRALIBS += -pgf90libs -latomic -lquadmath -lstdc++
     endif

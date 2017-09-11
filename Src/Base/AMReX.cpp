@@ -394,7 +394,7 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse,
     pp.query("nDevices", ParallelDescriptor::nDevices_used); // can also read from input files
     amrex::Print() << "Using " <<  ParallelDescriptor::get_num_devices_used() << " of " << device_count << " NVIDIA GPUs." << std::endl;
 #ifdef BL_USE_MPI
-    int device_rank = ParallelDescriptor::MyProc()%device_count;
+    int device_rank = ParallelDescriptor::MyProc()%ParallelDescriptor::get_num_devices_used();
     std::string name = "MPI RANK " + std::to_string(ParallelDescriptor::MyProc());
     checkCudaErrors(cudaSetDevice(device_rank));
     // call cudaDeviceSynchronize to create CUDA primary context
