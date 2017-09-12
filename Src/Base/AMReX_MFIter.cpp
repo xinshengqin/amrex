@@ -138,21 +138,20 @@ MFIter::~MFIter ()
 	ParallelDescriptor::MyTeam().MemoryBarrier();
 #endif
 
-#ifdef CUDA
-#ifdef _OPENMP
-#pragma omp barrier
-#pragma omp single
-#endif
-    if (use_device) {
-        // synchronize all devices
-        int n_dev = ParallelDescriptor::get_num_devices_used();
-        for (int i = 0; i < n_dev; ++i) {
-            checkCudaErrors(cudaSetDevice(i));
-            checkCudaErrors(cudaDeviceSynchronize());
-        }
-    }
-#endif
-    // releaseDeviceData();
+// #ifdef CUDA
+// #ifdef _OPENMP
+// #pragma omp barrier
+// #pragma omp single
+// #endif
+//     if (use_device) {
+//         // synchronize all devices
+//         int n_dev = ParallelDescriptor::get_num_devices_used();
+//         for (int i = 0; i < n_dev; ++i) {
+//             checkCudaErrors(cudaSetDevice(i));
+//             checkCudaErrors(cudaDeviceSynchronize());
+//         }
+//     }
+// #endif
 }
 
 void 
@@ -234,7 +233,7 @@ MFIter::Initialize ()
 	    }	    
 #else
             if (use_device) {
-                Real gpu_portion = 1; // change this to decide how many works should be assigned to GPU
+                Real gpu_portion = 0.5; // change this to decide how many works should be assigned to GPU
                 int tid = omp_get_thread_num();
                 int ntot = endIndex - beginIndex;
                 int gpu_endIndex = std::floor(ntot*gpu_portion);

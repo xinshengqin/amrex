@@ -18,7 +18,7 @@
 
 using namespace amrex;
 
-static const bool my_verbose = false;
+static const bool my_verbose = true;
 
 // constructor - reads in parameters from inputs file
 //             - sizes multilevel arrays and data structures
@@ -779,6 +779,10 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
     const Real* prob_lo = geom[lev].ProbLo();
     const Real cur_time = t_new[lev];
     const MultiFab& S_new = *phi_new[lev];
+    if (my_verbose) {
+        std::cout << "In AmrCoreAdv::EstTimeStep()" << std::endl;
+        std::cout << "Lev: " << lev << " has " << S_new.size() << " FABs." << std::endl;
+    }
 
 #ifdef CUDA
     // store tag for each fab here
@@ -821,11 +825,8 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
             m_tags[idx] = (intptr_t) &(S_new[mfi]);
 #endif
 
-#ifdef _OPENMP
-#pragma omp critical
-#endif
-            {
-#ifdef CUDA
+            // TODO: write ifdef for these
+            if ( omp_get_thread_num() == 0 ) { // only thread 0 talks to GPU
                 get_face_velocity(lev, cur_time,
                                   AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
                                          BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
@@ -837,7 +838,16 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
                 cudaStream_t pStream;
                 get_stream(&idx, &pStream, &dev_id);
                 cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
-#else
+                dt_est = std::numeric_limits<Real>::max(); // will process this later
+                if (my_verbose) {
+#pragma omp critical
+                    std::cout << "Thread: " << omp_get_thread_num() << " works on FAB: " << idx << ". (on GPU)" << std::endl;
+                }
+            } else {
+                if (my_verbose) {
+#pragma omp critical
+                    std::cout << "Thread: " << omp_get_thread_num() << " works on FAB: " << idx << std::endl;
+                }
                 get_face_velocity_host(lev, cur_time,
                                   AMREX_D_DECL(BL_TO_FORTRAN(ufaces[0][mfi]),
                                          BL_TO_FORTRAN(ufaces[1][mfi]),
@@ -845,12 +855,10 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
                                   dx, prob_lo);
                 for (int i = 0; i < BL_SPACEDIM; ++i) {
                     Real umax = ufaces[i][mfi].norm(0);
-                    // Real umax = ufaces[i][mfi].norm_device(0);
                     if (umax > 1.e-100) {
                         dt_est = std::min(dt_est, dx[i] / umax);
                     }
                 }
-#endif
             }
 
 	}
@@ -863,17 +871,30 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
         checkCudaErrors(cudaDeviceSynchronize());
     }
     Real* umax = (Real*) malloc(1 * sizeof(Real));
-    for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi) {
+
+// TODO: right now if you don't use Openmp here, you can't filter out 
+// FABs that needs these processing
+#ifdef _OPENMP
+#pragma omp parallel
+#endif
+    for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi) {
+        // TODO: write ifdef for these
         // compute norm of this fab on GPU
-        for (int i = 0; i < BL_SPACEDIM; ++i) {
-            int max_id = -1;
-            // assume we only have one component in the FAB now
-            // assume we use only one GPU
-            BL_ASSERT(ParallelDescriptor::get_num_devices_used() == 0);
-            cublasIdamax(cublasHandles[0], ufaces[i][mfi].nPts(), ufaces[i][mfi].devicePtr(), 1, &max_id);
-            checkCudaErrors(cudaMemcpy(umax, &((ufaces[i][mfi].devicePtr())[max_id]), 1*sizeof(Real),cudaMemcpyDeviceToHost));
-            if (*umax > 1.e-100) {
-                dt_est = std::min(dt_est, dx[i] / (*umax));
+        if ( omp_get_thread_num() == 0 ) { // Only FABs processed by GPU need the following
+            if (my_verbose) {
+#pragma omp critical
+                std::cout << "Thread: " << omp_get_thread_num() << " call cublasIdamax on FAB: " << mfi.LocalIndex() << ". (on GPU)" << std::endl;
+            }
+            for (int i = 0; i < BL_SPACEDIM; ++i) {
+                int max_id = -1;
+                // assume we only have one component in the FAB now
+                // assume we use only one GPU
+                BL_ASSERT(ParallelDescriptor::get_num_devices_used() == 0);
+                cublasIdamax(cublasHandles[0], ufaces[i][mfi].nPts(), ufaces[i][mfi].devicePtr(), 1, &max_id);
+                checkCudaErrors(cudaMemcpy(umax, &((ufaces[i][mfi].devicePtr())[max_id]), 1*sizeof(Real),cudaMemcpyDeviceToHost));
+                if (*umax > 1.e-100) {
+                    dt_est = std::min(dt_est, dx[i] / (*umax));
+                }
             }
         }
     }
