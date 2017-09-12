@@ -233,7 +233,7 @@ MFIter::Initialize ()
 	    }	    
 #else
             if (use_device) {
-                Real gpu_portion = 0.5; // change this to decide how many works should be assigned to GPU
+                Real gpu_portion = 0.4; // change this to decide how many works should be assigned to GPU
                 int tid = omp_get_thread_num();
                 int ntot = endIndex - beginIndex;
                 int gpu_endIndex = std::floor(ntot*gpu_portion);

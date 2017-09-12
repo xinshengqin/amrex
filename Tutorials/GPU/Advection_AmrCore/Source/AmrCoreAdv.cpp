@@ -18,7 +18,7 @@
 
 using namespace amrex;
 
-static const bool my_verbose = true;
+static const bool my_verbose = false;
 
 // constructor - reads in parameters from inputs file
 //             - sizes multilevel arrays and data structures
@@ -599,7 +599,8 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         intptr_t* m_tags = new intptr_t[n_fabs];
 #endif
 
-    BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group", advect_group);
+    BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group_all", advect_group_all);
+    BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group_cpu", advect_group_cpu);
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
@@ -631,34 +632,15 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             m_tags[idx] = (intptr_t) &(S_new[mfi]);
 #endif
 
-	    // Allocate fabs for fluxes and Godunov velocities.
-	    // for (int i = 0; i < BL_SPACEDIM ; i++) {
-	    //     const Box& bxtmp = amrex::surroundingNodes(bx,i);
-#ifdef CUDA
-	    //     // flux[i].setDevice(statein.deviceID());
-	    //     uface[i].setDevice(statein.deviceID());
-#endif
-	    //     // flux[i].resize(bxtmp,S_new.nComp());
-	    //     uface[i].resize(amrex::grow(bxtmp,1),1);
-	    // }
-
             // compute velocities on faces (prescribed function of space and time)
-#ifdef _OPENMP
-#pragma omp critical
-#endif
-            {
+            // TODO: write ifdef for these
+            if ( omp_get_thread_num() == 0 ) { // only thread 0 talks to GPU
                 get_face_velocity(lev, ctr_time,
                                   AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
                                          BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
                                          BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
                                   dx, prob_lo
-#ifdef CUDA
-                                  , idx, dev_id, m_tags[idx]
-#endif
-                                  );
-
-
-#ifdef CUDA
+                                  , idx, dev_id, m_tags[idx]);
                 statein.toDevice(idx);
                 advect(time, bx.loVect(), bx.hiVect(),
                        BL_TO_FORTRAN_3D_DEVICE(statein), 
@@ -678,10 +660,13 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                 cudaStream_t pStream;
                 get_stream(&idx, &pStream, &dev_id);
                 cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
-#else
-            // compute new state (stateout) and fluxes.
-                int idx = mfi.LocalIndex();
-                advect(time, bx.loVect(), bx.hiVect(),
+            } else {
+                get_face_velocity_host(lev, ctr_time,
+                                  AMREX_D_DECL(BL_TO_FORTRAN(ufaces[0][mfi]),
+                                         BL_TO_FORTRAN(ufaces[1][mfi]),
+                                         BL_TO_FORTRAN(ufaces[2][mfi])),
+                                  dx, prob_lo);
+                advect_host(time, bx.loVect(), bx.hiVect(),
                        BL_TO_FORTRAN_3D(statein), 
                        BL_TO_FORTRAN_3D(stateout),
                        AMREX_D_DECL(BL_TO_FORTRAN_3D(ufaces[0][mfi]),
@@ -691,12 +676,11 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                               BL_TO_FORTRAN_3D(fluxes[1][mfi]), 
                               BL_TO_FORTRAN_3D(fluxes[2][mfi])), 
                        dx, dt);
-#endif
             }
-
 
 	}
     }
+    BL_PROFILE_VAR_STOP(advect_group_cpu);
 #ifdef CUDA
     // TODO: put this in destructor
     // synchronize all devices
@@ -707,7 +691,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
     }
     delete[] m_tags;
 #endif
-    BL_PROFILE_VAR_STOP(advect_group);
+    BL_PROFILE_VAR_STOP(advect_group_all);
 
 
     // increment or decrement the flux registers by area and time-weighted fluxes
