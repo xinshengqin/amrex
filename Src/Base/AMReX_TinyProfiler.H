@@ -13,7 +13,40 @@
 #include "nvToolsExt.h"
 #endif
 
+
 namespace amrex {
+
+#ifdef CUDA
+namespace nvtx {
+extern uint32_t colors[];
+extern int num_colors;
+#define PUSH_RANGE(name,cid) { \
+        int color_id = cid; \
+        color_id = color_id%num_colors;\
+        nvtxEventAttributes_t eventAttrib = {0}; \
+        eventAttrib.version = NVTX_VERSION; \
+        eventAttrib.size = NVTX_EVENT_ATTRIB_STRUCT_SIZE; \
+        eventAttrib.colorType = NVTX_COLOR_ARGB; \
+        eventAttrib.color = colors[color_id]; \
+        eventAttrib.messageType = NVTX_MESSAGE_TYPE_ASCII; \
+        eventAttrib.message.ascii = name; \
+        nvtxRangePushEx(&eventAttrib); \
+}
+#define POP_RANGE nvtxRangePop();
+
+class CudaTracer {
+    public:
+        CudaTracer(const char* name, int cid = 0) {
+            PUSH_RANGE(name,cid);
+        }
+        ~CudaTracer() {
+            POP_RANGE;
+        }
+};
+
+}
+#endif
+
 
 //! A simple profiler that returns basic performance information (e.g. min, max, and average running time)
 class TinyProfiler

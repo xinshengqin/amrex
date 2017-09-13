@@ -448,6 +448,11 @@ inline std::string BLProfiler::CommStats::CFTToString(CommFuncType cft) {
 #define BL_TRACE_PROFILE_SETFLUSHSIZE(fsize)
 #define BL_PROFILE_CHANGE_FORT_INT_NAME(fname, intname)
 
+#ifdef CUDA
+#define BL_PROFILE_CUDA(fname) amrex::nvtx::CudaTracer uniq_name_using_macros__(fname);
+#define BL_PROFILE_CUDA_GROUP(fname, groupid) amrex::nvtx::CudaTracer uniq_name_using_macros__(fname, groupid);
+#endif
+
 #else
 
 #include <string>

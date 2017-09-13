@@ -1,4 +1,3 @@
-#include <iostream>
 
 #include <AMReX_ParallelDescriptor.H>
 #include <AMReX_ParmParse.H>
@@ -10,15 +9,7 @@
 #include <AmrCoreAdvPhysBC.H>
 #include <AmrCoreAdv_F.H>
 
-#ifdef CUDA
-#include <cuda_runtime_api.h>
-#include <AMReX_MemPool.H>
-#include <cublas_v2.h>
-#endif
-
 using namespace amrex;
-
-static const bool my_verbose = false;
 
 // constructor - reads in parameters from inputs file
 //             - sizes multilevel arrays and data structures
@@ -124,15 +115,8 @@ AmrCoreAdv::MakeNewLevelFromCoarse (int lev, Real time, const BoxArray& ba,
     const int ncomp = phi_new[lev-1]->nComp();
     const int nghost = phi_new[lev-1]->nGrow();
     
-    MFInfo mfinfo;
-#ifdef CUDA
-    mfinfo.SetDevice(true);
-#else
-    mfinfo.SetDevice(false);
-#endif
-    phi_new[lev].reset(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
-    phi_old[lev].reset(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
-
+    phi_new[lev].reset(new MultiFab(ba, dm, ncomp, nghost));
+    phi_old[lev].reset(new MultiFab(ba, dm, ncomp, nghost));
 
     t_new[lev] = time;
     t_old[lev] = time - 1.e200;
@@ -154,18 +138,12 @@ AmrCoreAdv::RemakeLevel (int lev, Real time, const BoxArray& ba,
     const int ncomp = phi_new[lev]->nComp();
     const int nghost = phi_new[lev]->nGrow();
 
-    MFInfo mfinfo;
-#ifdef CUDA
-    mfinfo.SetDevice(true);
-#else
-    mfinfo.SetDevice(false);
-#endif
 #if __cplusplus >= 201402L
-    auto new_state = std::make_unique<MultiFab>(ba, dm, ncomp, nghost, mfinfo);
-    auto old_state = std::make_unique<MultiFab>(ba, dm, ncomp, nghost, mfinfo);
+    auto new_state = std::make_unique<MultiFab>(ba, dm, ncomp, nghost);
+    auto old_state = std::make_unique<MultiFab>(ba, dm, ncomp, nghost);
 #else
-    std::unique_ptr<MultiFab> new_state(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
-    std::unique_ptr<MultiFab> old_state(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
+    std::unique_ptr<MultiFab> new_state(new MultiFab(ba, dm, ncomp, nghost));
+    std::unique_ptr<MultiFab> old_state(new MultiFab(ba, dm, ncomp, nghost));
 #endif
 
     FillPatch(lev, time, *new_state, 0, ncomp);
@@ -199,14 +177,8 @@ void AmrCoreAdv::MakeNewLevelFromScratch (int lev, Real time, const BoxArray& ba
     const int ncomp = 1;
     const int nghost = 0;
 
-    MFInfo mfinfo;
-#ifdef CUDA
-    mfinfo.SetDevice(true);
-#else
-    mfinfo.SetDevice(false);
-#endif
-    phi_new[lev].reset(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
-    phi_old[lev].reset(new MultiFab(ba, dm, ncomp, nghost, mfinfo));
+    phi_new[lev].reset(new MultiFab(ba, dm, ncomp, nghost));
+    phi_old[lev].reset(new MultiFab(ba, dm, ncomp, nghost));
 
     t_new[lev] = time;
     t_old[lev] = time - 1.e200;
@@ -371,13 +343,11 @@ AmrCoreAdv::CountCells (int lev)
     return cnt;
 }
 
-// compute a new multifab by copying in phi from valid region and filling ghost cells
+// compute a new multifab by coping in phi from valid region and filling ghost cells
 // works for single level and 2-level cases (fill fine grid ghost by interpolating from coarse)
 void
 AmrCoreAdv::FillPatch (int lev, Real time, MultiFab& mf, int icomp, int ncomp)
 {
-    if (my_verbose)
-        std::cout << "AmrCoreAdv::FillPatch with lev = " << lev << std::endl;
     if (lev == 0)
     {
 	Array<MultiFab*> smf;
@@ -489,9 +459,6 @@ AmrCoreAdv::timeStep (int lev, Real time, int iteration)
                 // regrid could add newly refine levels (if finest_level < max_level)
                 // so we save the previous finest level index
 		int old_finest = finest_level; 
-                if (Verbose()) {
-                    amrex::Print() << "Regrid based on level: " << lev << std::endl;
-                }
 		regrid(lev, time);
 
                 // mark that we have regridded this level already
@@ -555,8 +522,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 
     MultiFab& S_new = *phi_new[lev];
 
-    if (my_verbose)
-        std::cout << "Level: " << lev << " has " << S_new.size() << " FABs" << std::endl;
     const Real old_time = t_old[lev];
     const Real new_time = t_new[lev];
     const Real ctr_time = 0.5*(old_time+new_time);
@@ -564,135 +529,69 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
     const Real* dx = geom[lev].CellSize();
     const Real* prob_lo = geom[lev].ProbLo();
 
-    MultiFab fluxes[BL_SPACEDIM], ufaces[BL_SPACEDIM];
+    MultiFab fluxes[BL_SPACEDIM];
     if (do_reflux)
     {
 	for (int i = 0; i < BL_SPACEDIM; ++i)
 	{
 	    BoxArray ba = grids[lev];
 	    ba.surroundingNodes(i);
-            MFInfo mfinfo;
-#ifdef CUDA
-            mfinfo.SetDevice(true);
-#else
-            mfinfo.SetDevice(false);
-#endif
-	    fluxes[i].define(ba, dmap[lev], S_new.nComp(), 0, mfinfo);
-            ba.grow(1);
-	    ufaces[i].define(ba, dmap[lev], S_new.nComp(), 0, mfinfo);
+	    fluxes[i].define(ba, dmap[lev], S_new.nComp(), 0);
 	}
     }
 
-    MFInfo mfinfo;
-#ifdef CUDA
-    mfinfo.SetDevice(true);
-#else
-    mfinfo.SetDevice(false);
-#endif
     // State with ghost cells
-    MultiFab Sborder(grids[lev], dmap[lev], S_new.nComp(), num_grow, mfinfo);
+    MultiFab Sborder(grids[lev], dmap[lev], S_new.nComp(), num_grow);
     FillPatch(lev, time, Sborder, 0, Sborder.nComp());
 
-#ifdef CUDA
-        // store tag for each fab here
-        int n_fabs = S_new.size();
-        intptr_t* m_tags = new intptr_t[n_fabs];
-#endif
-
-    BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group_all", advect_group_all);
-    BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group_cpu", advect_group_cpu);
+    BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group",advect_group); 
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
     {
-	// FArrayBox flux[BL_SPACEDIM], uface[BL_SPACEDIM];
-#ifdef CUDA
-        // for (int i = 0; i < BL_SPACEDIM ; i++) {
-        //     // flux[i].usePinnedMemory(true);
-        //     uface[i].usePinnedMemory(true);
-        //     // flux[i].needDeviceCopy(true);
-        //     uface[i].needDeviceCopy(true);
-        // }
-#endif
+	FArrayBox flux[BL_SPACEDIM], uface[BL_SPACEDIM];
 
-#ifdef CUDA
-        // MFIter, tiling = false, use_device = true
-	for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi)
-#else
-	for (MFIter mfi(S_new, false); mfi.isValid(); ++mfi)
-#endif
+	for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi)
 	{
 	    const Box& bx = mfi.tilebox();
 
 	    const FArrayBox& statein = Sborder[mfi];
 	    FArrayBox& stateout      =   S_new[mfi];
-#ifdef CUDA
-            int idx = mfi.LocalIndex();
-            int dev_id = statein.deviceID();
-            m_tags[idx] = (intptr_t) &(S_new[mfi]);
-#endif
+
+	    // Allocate fabs for fluxes and Godunov velocities.
+	    for (int i = 0; i < BL_SPACEDIM ; i++) {
+		const Box& bxtmp = amrex::surroundingNodes(bx,i);
+		flux[i].resize(bxtmp,S_new.nComp());
+		uface[i].resize(amrex::grow(bxtmp,1),1);
+	    }
 
             // compute velocities on faces (prescribed function of space and time)
-            // TODO: write ifdef for these
-            if ( omp_get_thread_num() == 0 ) { // only thread 0 talks to GPU
-                get_face_velocity(lev, ctr_time,
-                                  AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
-                                         BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
-                                         BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
-                                  dx, prob_lo
-                                  , idx, dev_id, m_tags[idx]);
-                statein.toDevice(idx);
-                advect(time, bx.loVect(), bx.hiVect(),
-                       BL_TO_FORTRAN_3D_DEVICE(statein), 
-                       BL_TO_FORTRAN_3D_DEVICE(stateout),
-                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(ufaces[0][mfi]),
-                              BL_TO_FORTRAN_3D_DEVICE(ufaces[1][mfi]),
-                              BL_TO_FORTRAN_3D_DEVICE(ufaces[2][mfi])),
-                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(fluxes[0][mfi]), 
-                              BL_TO_FORTRAN_3D_DEVICE(fluxes[1][mfi]), 
-                              BL_TO_FORTRAN_3D_DEVICE(fluxes[2][mfi])), 
-                       dx, dt, idx, dev_id, m_tags[idx]);
-                stateout.toHost(idx);
-                for (int d = 0; d < BL_SPACEDIM ; d++) {
-                    fluxes[d][mfi].toHost(idx);
-                }
-                // add callback function to CUDA stream associated with idx
-                cudaStream_t pStream;
-                get_stream(&idx, &pStream, &dev_id);
-                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
-            } else {
-                get_face_velocity_host(lev, ctr_time,
-                                  AMREX_D_DECL(BL_TO_FORTRAN(ufaces[0][mfi]),
-                                         BL_TO_FORTRAN(ufaces[1][mfi]),
-                                         BL_TO_FORTRAN(ufaces[2][mfi])),
-                                  dx, prob_lo);
-                advect_host(time, bx.loVect(), bx.hiVect(),
-                       BL_TO_FORTRAN_3D(statein), 
-                       BL_TO_FORTRAN_3D(stateout),
-                       AMREX_D_DECL(BL_TO_FORTRAN_3D(ufaces[0][mfi]),
-                              BL_TO_FORTRAN_3D(ufaces[1][mfi]),
-                              BL_TO_FORTRAN_3D(ufaces[2][mfi])),
-                       AMREX_D_DECL(BL_TO_FORTRAN_3D(fluxes[0][mfi]), 
-                              BL_TO_FORTRAN_3D(fluxes[1][mfi]), 
-                              BL_TO_FORTRAN_3D(fluxes[2][mfi])), 
-                       dx, dt);
-            }
+	    get_face_velocity_host(lev, ctr_time,
+			      AMREX_D_DECL(BL_TO_FORTRAN(uface[0]),
+				     BL_TO_FORTRAN(uface[1]),
+				     BL_TO_FORTRAN(uface[2])),
+			      dx, prob_lo);
 
+            // compute new state (stateout) and fluxes.
+            advect_host(time, bx.loVect(), bx.hiVect(),
+		   BL_TO_FORTRAN_3D(statein), 
+		   BL_TO_FORTRAN_3D(stateout),
+		   AMREX_D_DECL(BL_TO_FORTRAN_3D(uface[0]),
+			  BL_TO_FORTRAN_3D(uface[1]),
+			  BL_TO_FORTRAN_3D(uface[2])),
+		   AMREX_D_DECL(BL_TO_FORTRAN_3D(flux[0]), 
+			  BL_TO_FORTRAN_3D(flux[1]), 
+			  BL_TO_FORTRAN_3D(flux[2])), 
+		   dx, dt);
+
+	    if (do_reflux) {
+		for (int i = 0; i < BL_SPACEDIM ; i++) {
+		    fluxes[i][mfi].copy(flux[i],mfi.nodaltilebox(i));	  
+		}
+	    }
 	}
     }
-    BL_PROFILE_VAR_STOP(advect_group_cpu);
-#ifdef CUDA
-    // TODO: put this in destructor
-    // synchronize all devices
-    int n_dev = ParallelDescriptor::get_num_devices_used();
-    for (int i = 0; i < n_dev; ++i) {
-        checkCudaErrors(cudaSetDevice(i));
-        checkCudaErrors(cudaDeviceSynchronize());
-    }
-    delete[] m_tags;
-#endif
-    BL_PROFILE_VAR_STOP(advect_group_all);
-
+    BL_PROFILE_VAR_STOP(advect_group); 
 
     // increment or decrement the flux registers by area and time-weighted fluxes
     // Note that the fluxes have already been scaled by dt and area
@@ -763,127 +662,34 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
     const Real* prob_lo = geom[lev].ProbLo();
     const Real cur_time = t_new[lev];
     const MultiFab& S_new = *phi_new[lev];
-    if (my_verbose) {
-        std::cout << "In AmrCoreAdv::EstTimeStep()" << std::endl;
-        std::cout << "Lev: " << lev << " has " << S_new.size() << " FABs." << std::endl;
-    }
-
-#ifdef CUDA
-    // store tag for each fab here
-    int n_fabs = S_new.size();
-    intptr_t* m_tags = new intptr_t[n_fabs];
-#endif
-
-    MultiFab ufaces[BL_SPACEDIM];
-    for (int i = 0; i < BL_SPACEDIM; ++i)
-    {
-        BoxArray ba = grids[lev];
-        ba.surroundingNodes(i);
-        MFInfo mfinfo;
-#ifdef CUDA
-        mfinfo.SetDevice(true);
-#else
-        mfinfo.SetDevice(false);
-#endif
-        ba.grow(1);
-        ufaces[i].define(ba, dmap[lev], S_new.nComp(), 0, mfinfo);
-    }
-
 
 #ifdef _OPENMP
 #pragma omp parallel reduction(min:dt_est)
 #endif
     {
+	FArrayBox uface[BL_SPACEDIM];
 
-
-#ifdef CUDA
-        // MFIter, tiling = false, use_device = true
-	for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi)
-#else
 	for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi)
-#endif
 	{
-#ifdef CUDA
-            int idx = mfi.LocalIndex();
-            int dev_id = ufaces[0][mfi].deviceID();
-            m_tags[idx] = (intptr_t) &(S_new[mfi]);
-#endif
+	    for (int i = 0; i < BL_SPACEDIM ; i++) {
+		const Box& bx = mfi.nodaltilebox(i);
+		uface[i].resize(bx,1);
+	    }
 
-            // TODO: write ifdef for these
-            if ( omp_get_thread_num() == 0 ) { // only thread 0 talks to GPU
-                get_face_velocity(lev, cur_time,
-                                  AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
-                                         BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
-                                         BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
-                                  dx, prob_lo
-                                  , idx, dev_id, m_tags[idx]
-                                  );
-                // add callback function to CUDA stream associated with idx
-                cudaStream_t pStream;
-                get_stream(&idx, &pStream, &dev_id);
-                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
-                dt_est = std::numeric_limits<Real>::max(); // will process this later
-                if (my_verbose) {
-#pragma omp critical
-                    std::cout << "Thread: " << omp_get_thread_num() << " works on FAB: " << idx << ". (on GPU)" << std::endl;
-                }
-            } else {
-                if (my_verbose) {
-#pragma omp critical
-                    std::cout << "Thread: " << omp_get_thread_num() << " works on FAB: " << idx << std::endl;
-                }
-                get_face_velocity_host(lev, cur_time,
-                                  AMREX_D_DECL(BL_TO_FORTRAN(ufaces[0][mfi]),
-                                         BL_TO_FORTRAN(ufaces[1][mfi]),
-                                         BL_TO_FORTRAN(ufaces[2][mfi])),
-                                  dx, prob_lo);
-                for (int i = 0; i < BL_SPACEDIM; ++i) {
-                    Real umax = ufaces[i][mfi].norm(0);
-                    if (umax > 1.e-100) {
-                        dt_est = std::min(dt_est, dx[i] / umax);
-                    }
-                }
-            }
+	    get_face_velocity_host(lev, cur_time,
+			      AMREX_D_DECL(BL_TO_FORTRAN(uface[0]),
+				     BL_TO_FORTRAN(uface[1]),
+				     BL_TO_FORTRAN(uface[2])),
+			      dx, prob_lo);
 
+	    for (int i = 0; i < BL_SPACEDIM; ++i) {
+		Real umax = uface[i].norm(0);
+		if (umax > 1.e-100) {
+		    dt_est = std::min(dt_est, dx[i] / umax);
+		}
+	    }
 	}
     }
-#ifdef CUDA
-    // synchronize all devices
-    int n_dev = ParallelDescriptor::get_num_devices_used();
-    for (int i = 0; i < n_dev; ++i) {
-        checkCudaErrors(cudaSetDevice(i));
-        checkCudaErrors(cudaDeviceSynchronize());
-    }
-    Real* umax = (Real*) malloc(1 * sizeof(Real));
-
-// TODO: right now if you don't use Openmp here, you can't filter out 
-// FABs that needs these processing
-#ifdef _OPENMP
-#pragma omp parallel
-#endif
-    for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi) {
-        // TODO: write ifdef for these
-        // compute norm of this fab on GPU
-        if ( omp_get_thread_num() == 0 ) { // Only FABs processed by GPU need the following
-            if (my_verbose) {
-#pragma omp critical
-                std::cout << "Thread: " << omp_get_thread_num() << " call cublasIdamax on FAB: " << mfi.LocalIndex() << ". (on GPU)" << std::endl;
-            }
-            for (int i = 0; i < BL_SPACEDIM; ++i) {
-                int max_id = -1;
-                // assume we only have one component in the FAB now
-                // assume we use only one GPU
-                BL_ASSERT(ParallelDescriptor::get_num_devices_used() == 0);
-                cublasIdamax(cublasHandles[0], ufaces[i][mfi].nPts(), ufaces[i][mfi].devicePtr(), 1, &max_id);
-                checkCudaErrors(cudaMemcpy(umax, &((ufaces[i][mfi].devicePtr())[max_id]), 1*sizeof(Real),cudaMemcpyDeviceToHost));
-                if (*umax > 1.e-100) {
-                    dt_est = std::min(dt_est, dx[i] / (*umax));
-                }
-            }
-        }
-    }
-    delete[] m_tags;
-#endif
 
     if (!local) {
 	ParallelDescriptor::ReduceRealMin(dt_est);

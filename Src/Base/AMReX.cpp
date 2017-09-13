@@ -390,7 +390,6 @@ amrex::Initialize (int& argc, char**& argv, bool build_parm_parse,
     amrex::Print() << "Found " << device_count << " NVIDIA GPUs." << std::endl;
     ParmParse pp;
     ParallelDescriptor::nDevices_used = 1; // use 1 device by default
-    int test;
     pp.query("nDevices", ParallelDescriptor::nDevices_used); // can also read from input files
     amrex::Print() << "Using " <<  ParallelDescriptor::get_num_devices_used() << " of " << device_count << " NVIDIA GPUs." << std::endl;
 #ifdef BL_USE_MPI

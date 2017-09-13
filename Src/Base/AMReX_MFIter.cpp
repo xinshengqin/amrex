@@ -233,7 +233,10 @@ MFIter::Initialize ()
 	    }	    
 #else
             if (use_device) {
-                Real gpu_portion = 0.4; // change this to decide how many works should be assigned to GPU
+                // by default, assign all tasks to GPU
+                Real gpu_portion = 1.0; // change this to decide how many works should be assigned to GPU
+                ParmParse pp;
+                pp.query("gpu_portion", gpu_portion); // can also read from input files
                 int tid = omp_get_thread_num();
                 int ntot = endIndex - beginIndex;
                 int gpu_endIndex = std::floor(ntot*gpu_portion);
@@ -277,9 +280,14 @@ MFIter::Initialize ()
 	currentIndex = beginIndex;
 #ifdef CUDA
         // evenly assigned FABs to difference devices if more than one exists
-        if (isValid()) {
-            int device_used = fabArray.deviceArray[currentIndex];
-            checkCudaErrors(cudaSetDevice(device_used));
+        if (isValid() && use_device) {
+#ifdef _OPENMP
+#pragma omp master
+#endif
+            {
+                int device_used = fabArray.deviceArray[currentIndex];
+                checkCudaErrors(cudaSetDevice(device_used));
+            }
         }
 #endif
 
@@ -398,11 +406,16 @@ MFIter::operator++ () {
 
     ++currentIndex;
 #ifdef CUDA
-    if (isValid()) {
-        int pre_use_device = fabArray.deviceArray[currentIndex-1];
-        int device_used = fabArray.deviceArray[currentIndex];
-        if (pre_use_device != device_used)
-            checkCudaErrors(cudaSetDevice(device_used));
+    if (isValid() && use_device) {
+#ifdef _OPENMP
+#pragma omp master
+#endif
+        {
+            int pre_use_device = fabArray.deviceArray[currentIndex-1];
+            int device_used = fabArray.deviceArray[currentIndex];
+            if (pre_use_device != device_used)
+                checkCudaErrors(cudaSetDevice(device_used));
+        }
     }
 #endif
 
