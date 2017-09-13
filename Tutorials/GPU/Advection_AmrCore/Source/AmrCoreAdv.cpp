@@ -639,7 +639,8 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         // Only when use_device = true, OMP thread 0 will get a MFIter
         // that has jobs for GPU
 	// for (MFIter mfi(S_new, true, true); mfi.isValid(); ++mfi)
-	for (MFIter mfi(S_new, true, true); mfi.isValid(); ++mfi)
+        // If tiling is on, m_tags is not large enough to store all tiles...
+	for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi)
 #else
 	for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi)
 #endif
@@ -871,7 +872,7 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 #ifdef CUDA
         // MFIter, tiling = false, use_device = true
 	// for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi)
-	for (MFIter mfi(S_new, true, true); mfi.isValid(); ++mfi)
+	for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi)
 #else
 	for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi)
 #endif
