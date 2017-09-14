@@ -25,8 +25,8 @@ static const bool my_verbose = false;
 struct CopyTag {
     public:
         std::array<Box, BL_SPACEDIM> box;
-        std::array<std::unique_ptr<FArrayBox>, BL_SPACEDIM> dst;
-        std::array<std::unique_ptr<FArrayBox>, BL_SPACEDIM> src;
+        std::array<FArrayBox*, BL_SPACEDIM> dst;
+        std::array<FArrayBox*, BL_SPACEDIM> src;
 };
 
 void CUDART_CB cudaCallback_copyFAB(cudaStream_t stream, cudaError_t status, void *data){
@@ -613,16 +613,25 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 #ifdef CUDA
         // store tag for each fab here
         int n_fabs = S_new.size();
-        intptr_t* m_tags = new intptr_t[n_fabs];
-        CopyTag* m_copy_tags = new CopyTag[n_fabs];
+        std::vector<intptr_t> m_mem_tags;
+        m_mem_tags.reserve(n_fabs);
+        std::vector<CopyTag> m_copy_tags;
+        m_copy_tags.reserve(n_fabs);
 #endif
-        std::array<std::unique_ptr<FArrayBox[]>, BL_SPACEDIM> flux_fabs;
-        std::array<std::unique_ptr<FArrayBox[]>, BL_SPACEDIM> uface_fabs;
+        // std::array<std::unique_ptr<FArrayBox[]>, BL_SPACEDIM> flux_fabs;
+        // std::array<std::unique_ptr<FArrayBox[]>, BL_SPACEDIM> uface_fabs;
+        // for (int i = 0; i < BL_SPACEDIM ; i++) {
+        //     flux_fabs[i].reset(new FArrayBox[n_fabs]);
+        //     uface_fabs[i].reset(new FArrayBox[n_fabs]);
+        // }
+        std::array<std::vector<FArrayBox>, BL_SPACEDIM> flux_fabs;
+        std::array<std::vector<FArrayBox>, BL_SPACEDIM> uface_fabs;
         for (int i = 0; i < BL_SPACEDIM ; i++) {
-            flux_fabs[i].reset(new FArrayBox[n_fabs]);
-            uface_fabs[i].reset(new FArrayBox[n_fabs]);
+            flux_fabs[i].reserve(n_fabs);
+            uface_fabs[i].reserve(n_fabs);
         }
-        int gpu_fabs = 0; //fabs processed by gpu
+        // std::vector<int> gpu_fabs; //fabs processed by gpu
+        // gpu_fabs.reserve(n_fabs);
 
     BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group_all", advect_group_all);
     BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group_cpu", advect_group_cpu);
@@ -639,7 +648,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         // Only when use_device = true, OMP thread 0 will get a MFIter
         // that has jobs for GPU
 	// for (MFIter mfi(S_new, true, true); mfi.isValid(); ++mfi)
-        // If tiling is on, m_tags is not large enough to store all tiles...
 	for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi)
 #else
 	for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi)
@@ -656,43 +664,46 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             // if ( false ) { // only thread 0 talks to GPU
                 int idx = mfi.LocalIndex();
                 int dev_id = statein.deviceID();
-                m_tags[idx] = (intptr_t) &(S_new[mfi]);
+                m_mem_tags.push_back((intptr_t) &(S_new[mfi]));
 
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    flux_fabs[i][idx].usePinnedMemory(true);
-                    uface_fabs[i][idx].usePinnedMemory(true);
-                    flux_fabs[i][idx].needDeviceCopy(true);
-                    uface_fabs[i][idx].needDeviceCopy(true);
-                    flux_fabs[i][idx].setDevice(0);
-                    uface_fabs[i][idx].setDevice(0);
-                }
-                // Allocate fabs for fluxes and Godunov velocities.
-                for (int i = 0; i < BL_SPACEDIM ; i++) {
+                    flux_fabs[i].push_back(FArrayBox());
+                    (flux_fabs[i].back()).usePinnedMemory(true);
+                    (flux_fabs[i].back()).needDeviceCopy(true);
+                    (flux_fabs[i].back()).setDevice(0);
+
+                    uface_fabs[i].push_back(FArrayBox());
+                    (uface_fabs[i].back()).usePinnedMemory(true);
+                    (uface_fabs[i].back()).needDeviceCopy(true);
+                    (uface_fabs[i].back()).setDevice(0);
+
+                    // Allocate fabs for fluxes and Godunov velocities.
                     const Box& bxtmp = amrex::surroundingNodes(bx,i);
-                    flux_fabs[i][idx].resize(bxtmp,S_new.nComp());
-                    uface_fabs[i][idx].resize(amrex::grow(bxtmp,1),1);
+                    (flux_fabs[i].back()).resize(bxtmp,S_new.nComp());
+                    (uface_fabs[i].back()).resize(amrex::grow(bxtmp,1),1);
+
                 }
-                CopyTag& copy_tag = m_copy_tags[idx];
+                CopyTag copy_tag;
                 get_face_velocity(lev, ctr_time,
-                                  AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(uface_fabs[0][idx]),
-                                         BL_TO_FORTRAN_DEVICE(uface_fabs[1][idx]),
-                                         BL_TO_FORTRAN_DEVICE(uface_fabs[2][idx])),
+                                  AMREX_D_DECL(BL_TO_FORTRAN_DEVICE((uface_fabs[0].back())),
+                                               BL_TO_FORTRAN_DEVICE((uface_fabs[1].back())),
+                                               BL_TO_FORTRAN_DEVICE((uface_fabs[2].back()))),
                                   dx, prob_lo
-                                  , idx, dev_id, m_tags[idx]);
+                                  , idx, dev_id, m_mem_tags.back());
                 statein.toDevice(idx);
                 advect(time, bx.loVect(), bx.hiVect(),
                        BL_TO_FORTRAN_3D_DEVICE(statein), 
                        BL_TO_FORTRAN_3D_DEVICE(stateout),
-                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(uface_fabs[0][idx]),
-                              BL_TO_FORTRAN_3D_DEVICE(uface_fabs[1][idx]),
-                              BL_TO_FORTRAN_3D_DEVICE(uface_fabs[2][idx])),
-                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(flux_fabs[0][idx]), 
-                              BL_TO_FORTRAN_3D_DEVICE(flux_fabs[1][idx]), 
-                              BL_TO_FORTRAN_3D_DEVICE(flux_fabs[2][idx])), 
-                       dx, dt, idx, dev_id, m_tags[idx]);
+                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE((uface_fabs[0].back())),
+                                    BL_TO_FORTRAN_3D_DEVICE((uface_fabs[1].back())),
+                                    BL_TO_FORTRAN_3D_DEVICE((uface_fabs[2].back()))),
+                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE((flux_fabs[0].back())), 
+                                    BL_TO_FORTRAN_3D_DEVICE((flux_fabs[1].back())), 
+                                    BL_TO_FORTRAN_3D_DEVICE((flux_fabs[2].back()))), 
+                       dx, dt, idx, dev_id, m_mem_tags.back());
                 stateout.toHost(idx);
                 for (int d = 0; d < BL_SPACEDIM ; d++) {
-                    flux_fabs[d][idx].toHost(idx);
+                    (flux_fabs[d].back()).toHost(idx);
                 }
                 // add callback function to CUDA stream associated with idx
                 cudaStream_t pStream;
@@ -700,13 +711,14 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                 if (do_reflux) {
                     for (int i = 0; i < BL_SPACEDIM ; i++) {
                         copy_tag.box[i] = mfi.nodaltilebox(i);
-                        copy_tag.dst[i].reset(&(fluxes[i][mfi]));
-                        copy_tag.src[i].reset(&(flux_fabs[i][idx]));
+                        copy_tag.dst[i] = &(fluxes[i][mfi]);
+                        copy_tag.src[i] = &(flux_fabs[i].back());
                     }
                     // cudaStreamAddCallback(pStream, cudaCallback_copyFAB, (void*) &copy_tag, 0);
                 }
-                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
-                gpu_fabs++;
+                m_copy_tags.push_back(copy_tag);
+                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &(m_mem_tags.back()), 0);
+                // gpu_fabs.push_back(idx);
             } else {
             // BL_PROFILE_CUDA_GROUP("advect_group_cpu_exclusive", omp_get_thread_num());
             // std::cout << "get_face_velocity_host" << std::endl;
@@ -751,10 +763,10 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         checkCudaErrors(cudaSetDevice(i));
         checkCudaErrors(cudaDeviceSynchronize());
     }
-    delete[] m_tags;
     if (do_reflux) {
-        if ( gpu_fabs > 0 ) { 
-            for (int nf = 0; nf < n_fabs; ++nf) {
+        int N = m_copy_tags.size();
+        if ( N > 0 ) { 
+            for ( int nf = 0; nf < N; ++nf) {
                 CopyTag& copy_tag = m_copy_tags[nf];
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     (copy_tag.dst[i])->copy(*(copy_tag.src[i]), copy_tag.box[i]);
@@ -843,7 +855,7 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 #ifdef CUDA
     // store tag for each fab here
     int n_fabs = S_new.size();
-    intptr_t* m_tags = new intptr_t[n_fabs];
+    intptr_t* m_mem_tags = new intptr_t[n_fabs];
 #endif
 
     MultiFab ufaces[BL_SPACEDIM];
@@ -880,7 +892,7 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 #ifdef CUDA
             int idx = mfi.LocalIndex();
             int dev_id = ufaces[0][mfi].deviceID();
-            m_tags[idx] = (intptr_t) &(S_new[mfi]);
+            m_mem_tags[idx] = (intptr_t) &(S_new[mfi]);
 #endif
 
             // TODO: write ifdef for these
@@ -890,12 +902,12 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
                                          BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
                                          BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
                                   dx, prob_lo
-                                  , idx, dev_id, m_tags[idx]
+                                  , idx, dev_id, m_mem_tags[idx]
                                   );
                 // add callback function to CUDA stream associated with idx
                 cudaStream_t pStream;
                 get_stream(&idx, &pStream, &dev_id);
-                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_tags[idx], 0);
+                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_mem_tags[idx], 0);
                 dt_est = std::numeric_limits<Real>::max(); // will process this later
                 if (my_verbose) {
 #pragma omp critical
@@ -960,7 +972,7 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
             }
         }
     }
-    delete[] m_tags;
+    delete[] m_mem_tags;
 #endif
 
     if (!local) {
