@@ -232,7 +232,7 @@ MFIter::Initialize ()
 		endIndex = beginIndex + nr;
 	    }	    
 #else
-            if (use_device) {
+            if (use_device) { // Both CPU will GPU will get tasks
                 // by default, assign all tasks to GPU
                 Real gpu_portion = 1.0; // change this to decide how many works should be assigned to GPU
                 ParmParse pp;
@@ -259,7 +259,7 @@ MFIter::Initialize ()
                         endIndex = beginIndex + nr;
                     }	    
                 }
-            } else {
+            } else { // Only CPU will get tasks
                 int tid = omp_get_thread_num();
                 int ntot = endIndex - beginIndex;
                 int nr   = ntot / nthreads;
@@ -405,20 +405,20 @@ void
 MFIter::operator++ () {
 
     ++currentIndex;
-#ifdef CUDA
-    if (isValid() && use_device) {
-#ifdef _OPENMP
-#pragma omp master
-#endif
-        {
-            int pre_use_device = fabArray.deviceArray[currentIndex-1];
-            int device_used = fabArray.deviceArray[currentIndex];
-            if (pre_use_device != device_used)
-                checkCudaErrors(cudaSetDevice(device_used));
-        }
-    }
-#endif
-
+// #ifdef CUDA
+//     if (isValid() && use_device) {
+// #ifdef _OPENMP
+// #pragma omp master
+// #endif
+//         {
+//             int pre_use_device = fabArray.deviceArray[currentIndex-1];
+//             int device_used = fabArray.deviceArray[currentIndex];
+//             if (pre_use_device != device_used)
+//                 checkCudaErrors(cudaSetDevice(device_used));
+//         }
+//     }
+// #endif
+// 
     // releaseDeviceData();
 
 }
