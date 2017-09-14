@@ -1403,16 +1403,20 @@ BaseFab<T>::BaseFab (BaseFab<T>&& rhs) noexcept
     numpts(rhs.numpts),
     truesize(rhs.truesize),
     dptr(rhs.dptr),
-    dptr_d(0),
+    dptr_d(rhs.dptr_d),
     ptr_owner(rhs.ptr_owner),
 #ifdef CUDA
-    device_id(-1),
-    pinned_memory(false),
+    device_id(rhs.device_id),
+    pinned_memory(rhs.pinned_memory),
 #endif
     shared_memory(rhs.shared_memory)
 {
     rhs.dptr = nullptr;
     rhs.ptr_owner = false;
+#ifdef CUDA
+    rhs.dptr_d = nullptr;
+    rhs.device_id = -1;
+#endif
 }
 
 template <class T>
