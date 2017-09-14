@@ -618,12 +618,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         std::vector<CopyTag> m_copy_tags;
         m_copy_tags.reserve(n_fabs);
 #endif
-        // std::array<std::unique_ptr<FArrayBox[]>, BL_SPACEDIM> flux_fabs;
-        // std::array<std::unique_ptr<FArrayBox[]>, BL_SPACEDIM> uface_fabs;
-        // for (int i = 0; i < BL_SPACEDIM ; i++) {
-        //     flux_fabs[i].reset(new FArrayBox[n_fabs]);
-        //     uface_fabs[i].reset(new FArrayBox[n_fabs]);
-        // }
         std::array<std::vector<FArrayBox>, BL_SPACEDIM> flux_fabs;
         std::array<std::vector<FArrayBox>, BL_SPACEDIM> uface_fabs;
         for (int i = 0; i < BL_SPACEDIM ; i++) {
@@ -631,7 +625,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             uface_fabs[i].reserve(n_fabs);
         }
         // std::vector<int> gpu_fabs; //fabs processed by gpu
-        // gpu_fabs.reserve(n_fabs);
 
     BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group_all", advect_group_all);
     BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group_cpu", advect_group_cpu);
@@ -763,7 +756,9 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         checkCudaErrors(cudaSetDevice(i));
         checkCudaErrors(cudaDeviceSynchronize());
     }
+    // TODO: go back to use MultiFab to store all flux (but not uface FABs, which can save unnecessary memory)
     if (do_reflux) {
+        BL_PROFILE("AmrCoreAdv::Advance()::do_reflux");
         int N = m_copy_tags.size();
         if ( N > 0 ) { 
             for ( int nf = 0; nf < N; ++nf) {
