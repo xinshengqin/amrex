@@ -672,10 +672,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                 int dev_id = statein.deviceID();
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     const Box& bxtmp = amrex::surroundingNodes(bx,i);
-                    flux[i].usePinnedMemory(true);
-                    flux[i].needDeviceCopy(true);
-                    flux[i].setDevice(0);
-                    flux[i].resize(bxtmp,S_new.nComp());
 
                     uface[i].usePinnedMemory(true);
                     uface[i].needDeviceCopy(true);
@@ -697,21 +693,13 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                        AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(uface[0]),
                                     BL_TO_FORTRAN_3D_DEVICE(uface[1]),
                                     BL_TO_FORTRAN_3D_DEVICE(uface[2])),
-                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(flux[0]), 
-                                    BL_TO_FORTRAN_3D_DEVICE(flux[1]), 
-                                    BL_TO_FORTRAN_3D_DEVICE(flux[2])), 
+                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(fluxes[0][mfi]), 
+                                    BL_TO_FORTRAN_3D_DEVICE(fluxes[1][mfi]), 
+                                    BL_TO_FORTRAN_3D_DEVICE(fluxes[2][mfi])), 
                        dx, dt, idx, dev_id, idx);
                 stateout.toHost(idx);
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    flux[i].toHost(idx);
-                }
-                if (do_reflux) {
-                    for (int i = 0; i < BL_SPACEDIM ; i++) {
-                        m_copy_dst[i].push_back(&(fluxes[i][mfi]));
-                        Box copy_box = mfi.validbox();
-                        copy_box.surroundingNodes(i);
-                        m_copy_box[i].push_back(copy_box);
-                    }
+                    fluxes[i][mfi].toHost(idx);
                 }
                 // add callback function to CUDA stream associated with idx
                 cudaStream_t pStream;
@@ -720,7 +708,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                 cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &(m_mem_tags[idx]), 0);
 
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    flux_fabs[i].push_back(std::move(flux[i]));
                     uface_fabs[i].push_back(std::move(uface[i]));
                 }
             } else {
@@ -769,17 +756,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             for (int i = 0; i < n_dev; ++i) {
                 checkCudaErrors(cudaSetDevice(i));
                 checkCudaErrors(cudaDeviceSynchronize());
-            }
-            if (do_reflux) {
-                BL_PROFILE("AmrCoreAdv::Advance()::do_reflux");
-                int N = flux_fabs[0].size();
-                if ( N > 0 ) {
-                    for (int nf = 0; nf < N; ++nf) {
-                        for (int i = 0; i < BL_SPACEDIM ; i++) {
-                            m_copy_dst[i][nf]->copy(flux_fabs[i][nf], m_copy_box[i][nf]);
-                        }
-                    }
-                }
             }
         }
 #endif
