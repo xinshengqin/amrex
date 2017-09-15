@@ -624,9 +624,11 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
     FillPatch(lev, time, Sborder, 0, Sborder.nComp());
 
 #ifdef CUDA
-    // std::vector<intptr_t> m_mem_tags;
-    // m_mem_tags.reserve(n_fabs);
     // TODO: find a better solution to this
+    // my thought: If I use callback function to handle this 
+    // I can let MFIter create m_mem_tags, who knows the required size 
+    // of m_mem_tags. Then I move the do_reflux copy into the loop,
+    // which is actually push to the CUDA queue by using callback functions
     intptr_t* m_mem_tags = new intptr_t[100000];
     std::array<std::vector<FArrayBox*>, BL_SPACEDIM> m_copy_dst;
     std::array<std::vector<Box>, BL_SPACEDIM> m_copy_box;
@@ -636,7 +638,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
     std::array<std::vector<FArrayBox>, BL_SPACEDIM> uface_fabs;
 
     BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group_all", advect_group_all);
-    BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group_cpu", advect_group_cpu);
 #ifdef _OPENMP
 #pragma omp parallel 
 #endif
@@ -661,29 +662,14 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             if ( omp_get_thread_num() == 0 ) { // only thread 0 talks to GPU
                 int local_tile_index = mfi.LocalTileIndex();
 
-                // amrex::Print() << "local_grid_index: " << mfi.LocalIndex() << std::endl;
-                // amrex::Print() << "local_tile_index: " << mfi.LocalTileIndex() << std::endl;
-                // amrex::Print() << "currentIndex: " << mfi.tileIndex() << std::endl;
-                // amrex::Print() << "grid box: " << std::endl;
-                // amrex::Print() << mfi.validbox() << std::endl;
-                // amrex::Print() << "tile box: " << std::endl;
-                // amrex::Print() << mfi.tilebox() << std::endl;
-                //
                 
                 if (local_tile_index != 0) continue;
 
                 // get box for the entire FAB
                 const Box& bx = mfi.validbox();
-                // const Box& bx = mfi.tilebox();
-                //
-                // currentIndex
-                int mfi_idx = mfi.tileIndex();
                 // local grid index
                 int idx = mfi.LocalIndex();
                 int dev_id = statein.deviceID();
-                amrex::Print() << "\tAdvance grid: " << idx << std::endl;
-                amrex::Print() << "\tgrid box: " << std::endl;
-                amrex::Print() << "\t\t" << bx << std::endl;
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     const Box& bxtmp = amrex::surroundingNodes(bx,i);
                     flux[i].usePinnedMemory(true);
@@ -703,7 +689,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                                                BL_TO_FORTRAN_DEVICE((uface[1])),
                                                BL_TO_FORTRAN_DEVICE((uface[2]))),
                                   dx, prob_lo
-                                  , idx, dev_id, mfi_idx);
+                                  , idx, dev_id, idx);
                 statein.toDevice(idx);
                 advect(time, bx.loVect(), bx.hiVect(),
                        BL_TO_FORTRAN_3D_DEVICE(statein), 
@@ -714,7 +700,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                        AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(flux[0]), 
                                     BL_TO_FORTRAN_3D_DEVICE(flux[1]), 
                                     BL_TO_FORTRAN_3D_DEVICE(flux[2])), 
-                       dx, dt, idx, dev_id, mfi_idx);
+                       dx, dt, idx, dev_id, idx);
                 stateout.toHost(idx);
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     flux[i].toHost(idx);
@@ -722,7 +708,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                 if (do_reflux) {
                     for (int i = 0; i < BL_SPACEDIM ; i++) {
                         m_copy_dst[i].push_back(&(fluxes[i][mfi]));
-                        // m_copy_box[i].push_back(mfi.nodaltilebox(i));
                         Box copy_box = mfi.validbox();
                         copy_box.surroundingNodes(i);
                         m_copy_box[i].push_back(copy_box);
@@ -731,18 +716,15 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                 // add callback function to CUDA stream associated with idx
                 cudaStream_t pStream;
                 get_stream(&idx, &pStream, &dev_id);
-                // m_mem_tags[idx] = idx;
-                // cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &(m_mem_tags[idx]), 0);
-                m_mem_tags[mfi_idx] = mfi_idx;
-                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &(m_mem_tags[mfi_idx]), 0);
+                m_mem_tags[idx] = idx;
+                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &(m_mem_tags[idx]), 0);
 
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     flux_fabs[i].push_back(std::move(flux[i]));
                     uface_fabs[i].push_back(std::move(uface[i]));
                 }
             } else {
-            // BL_PROFILE_CUDA_GROUP("advect_group_cpu_exclusive", omp_get_thread_num());
-            std::cout << "get_face_velocity_host" << std::endl;
+                BL_PROFILE_CUDA_GROUP("advect_group_cpu_exclusive", omp_get_thread_num());
                 const Box& bx = mfi.tilebox();
                 // Allocate fabs for fluxes and Godunov velocities.
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
@@ -775,31 +757,35 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             }
 
 	}
-    }
-    BL_PROFILE_VAR_STOP(advect_group_cpu);
+
 #ifdef CUDA
-    // TODO: put this in destructor
-    // also put destruction of m_mem_tags in destructor
-    // In this way, we can create m_mem_tags after MFIter is constrctued,
-    // by when we already know number of all tiles so we know how much 
-    // memory we need to allocate for m_mem_tags
-    int n_dev = ParallelDescriptor::get_num_devices_used();
-    for (int i = 0; i < n_dev; ++i) {
-        checkCudaErrors(cudaSetDevice(i));
-        checkCudaErrors(cudaDeviceSynchronize());
-    }
-    if (do_reflux) {
-        BL_PROFILE("AmrCoreAdv::Advance()::do_reflux");
-        int N = flux_fabs[0].size();
-        if ( N > 0 ) {
-            for (int nf = 0; nf < N; ++nf) {
-                for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    m_copy_dst[i][nf]->copy(flux_fabs[i][nf], m_copy_box[i][nf]);
+        if ( omp_get_thread_num() == 0 ) { // thread 0 post-process GPU stuff
+            // TODO: put this in destructor
+            // also put destruction of m_mem_tags in destructor
+            // In this way, we can create m_mem_tags after MFIter is constrctued,
+            // by when we already know number of all tiles so we know how much 
+            // memory we need to allocate for m_mem_tags
+            int n_dev = ParallelDescriptor::get_num_devices_used();
+            for (int i = 0; i < n_dev; ++i) {
+                checkCudaErrors(cudaSetDevice(i));
+                checkCudaErrors(cudaDeviceSynchronize());
+            }
+            if (do_reflux) {
+                BL_PROFILE("AmrCoreAdv::Advance()::do_reflux");
+                int N = flux_fabs[0].size();
+                if ( N > 0 ) {
+                    for (int nf = 0; nf < N; ++nf) {
+                        for (int i = 0; i < BL_SPACEDIM ; i++) {
+                            m_copy_dst[i][nf]->copy(flux_fabs[i][nf], m_copy_box[i][nf]);
+                        }
+                    }
                 }
             }
         }
-    }
 #endif
+
+
+    }
     BL_PROFILE_VAR_STOP(advect_group_all);
 
 

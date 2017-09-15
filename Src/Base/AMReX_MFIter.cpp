@@ -4,6 +4,7 @@
 #include <AMReX_FabArray.H>
 #include <AMReX_FArrayBox.H>
 #include <AMReX_Device.H>
+#include <AMReX_Print.H>
 
 #ifdef CUDA
 #include <cuda_runtime_api.h>
@@ -220,6 +221,7 @@ MFIter::Initialize ()
 	if (nthreads > 1)
 	{
 #ifndef CUDA
+
 	    int tid = omp_get_thread_num();
 	    int ntot = endIndex - beginIndex;
 	    int nr   = ntot / nthreads;
@@ -232,7 +234,7 @@ MFIter::Initialize ()
 		endIndex = beginIndex + nr;
 	    }	    
 #else
-            if (use_device) { // Both CPU will GPU will get tasks
+            if (use_device) { // Both CPU and GPU will get tasks
                 // by default, assign all tasks to GPU
                 Real gpu_portion = 1.0; // change this to decide how many works should be assigned to GPU
                 ParmParse pp;
@@ -240,6 +242,37 @@ MFIter::Initialize ()
                 int tid = omp_get_thread_num();
                 int ntot = endIndex - beginIndex;
                 int gpu_endIndex = std::floor(ntot*gpu_portion);
+
+
+                // if tiling is used, adjust gpu_endIndex such that GPU get entire FABs.
+                if (local_tile_index_map) { // tiling is on
+                    for (int i = gpu_endIndex; i < endIndex; ++i) {
+                        if (0 == (*local_tile_index_map)[i]) {
+                            break;
+                        }
+                        gpu_endIndex = i+1;
+                    }
+                    // output for debug
+// #pragma omp master
+//                     {
+//                         amrex::Print() << "local_index_map: " << std::endl;
+//                         amrex::Print() << "{ ";
+//                         int N = local_index_map->size();
+//                         for (int i = 0; i < N; ++i ) {
+//                             amrex::Print() << (*local_index_map)[i] << " ";
+//                         }
+//                         amrex::Print() << "}" << std::endl;;
+//                         amrex::Print() << "local_tile_index_map: " << std::endl;
+//                         amrex::Print() << "{ ";
+//                         N = local_tile_index_map->size();
+//                         for (int i = 0; i < N; ++i ) {
+//                             amrex::Print() << (*local_tile_index_map)[i] << " ";
+//                         }
+//                         amrex::Print() << "}" << std::endl;;
+//                     }
+
+                }
+
                 if ( 0 == tid) {
                     beginIndex = 0;
                     endIndex = gpu_endIndex;
