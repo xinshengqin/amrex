@@ -1404,6 +1404,7 @@ BaseFab<T>::BaseFab (BaseFab<T>&& rhs) noexcept
     truesize(rhs.truesize),
     dptr(rhs.dptr),
     dptr_d(rhs.dptr_d),
+    device_copy(rhs.device_copy),
     ptr_owner(rhs.ptr_owner),
 #ifdef CUDA
     device_id(rhs.device_id),
@@ -1413,9 +1414,11 @@ BaseFab<T>::BaseFab (BaseFab<T>&& rhs) noexcept
 {
     rhs.dptr = nullptr;
     rhs.ptr_owner = false;
+    rhs.device_copy = false;
 #ifdef CUDA
     rhs.dptr_d = nullptr;
     rhs.device_id = -1;
+    rhs.pinned_memory = false;
 #endif
 }
 
