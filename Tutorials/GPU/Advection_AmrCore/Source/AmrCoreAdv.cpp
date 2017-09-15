@@ -653,17 +653,37 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi)
 #endif
 	{
-	    const Box& bx = mfi.tilebox();
 
 	    const FArrayBox& statein = Sborder[mfi];
 	    FArrayBox& stateout      =   S_new[mfi];
 
             // TODO: write ifdef for these
             if ( omp_get_thread_num() == 0 ) { // only thread 0 talks to GPU
-            // if ( false ) { // only thread 0 talks to GPU
-                // int idx = mfi.LocalIndex();
-                int idx = mfi.tileIndex();
+                int local_tile_index = mfi.LocalTileIndex();
+
+                // amrex::Print() << "local_grid_index: " << mfi.LocalIndex() << std::endl;
+                // amrex::Print() << "local_tile_index: " << mfi.LocalTileIndex() << std::endl;
+                // amrex::Print() << "currentIndex: " << mfi.tileIndex() << std::endl;
+                // amrex::Print() << "grid box: " << std::endl;
+                // amrex::Print() << mfi.validbox() << std::endl;
+                // amrex::Print() << "tile box: " << std::endl;
+                // amrex::Print() << mfi.tilebox() << std::endl;
+                //
+                
+                if (local_tile_index != 0) continue;
+
+                // get box for the entire FAB
+                const Box& bx = mfi.validbox();
+                // const Box& bx = mfi.tilebox();
+                //
+                // currentIndex
+                int mfi_idx = mfi.tileIndex();
+                // local grid index
+                int idx = mfi.LocalIndex();
                 int dev_id = statein.deviceID();
+                amrex::Print() << "\tAdvance grid: " << idx << std::endl;
+                amrex::Print() << "\tgrid box: " << std::endl;
+                amrex::Print() << "\t\t" << bx << std::endl;
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     const Box& bxtmp = amrex::surroundingNodes(bx,i);
                     flux[i].usePinnedMemory(true);
@@ -683,7 +703,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                                                BL_TO_FORTRAN_DEVICE((uface[1])),
                                                BL_TO_FORTRAN_DEVICE((uface[2]))),
                                   dx, prob_lo
-                                  , idx, dev_id, idx);
+                                  , idx, dev_id, mfi_idx);
                 statein.toDevice(idx);
                 advect(time, bx.loVect(), bx.hiVect(),
                        BL_TO_FORTRAN_3D_DEVICE(statein), 
@@ -694,7 +714,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                        AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(flux[0]), 
                                     BL_TO_FORTRAN_3D_DEVICE(flux[1]), 
                                     BL_TO_FORTRAN_3D_DEVICE(flux[2])), 
-                       dx, dt, idx, dev_id, idx);
+                       dx, dt, idx, dev_id, mfi_idx);
                 stateout.toHost(idx);
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     flux[i].toHost(idx);
@@ -702,26 +722,28 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                 if (do_reflux) {
                     for (int i = 0; i < BL_SPACEDIM ; i++) {
                         m_copy_dst[i].push_back(&(fluxes[i][mfi]));
-                        m_copy_box[i].push_back(mfi.nodaltilebox(i));
+                        // m_copy_box[i].push_back(mfi.nodaltilebox(i));
+                        Box copy_box = mfi.validbox();
+                        copy_box.surroundingNodes(i);
+                        m_copy_box[i].push_back(copy_box);
                     }
                 }
                 // add callback function to CUDA stream associated with idx
                 cudaStream_t pStream;
                 get_stream(&idx, &pStream, &dev_id);
-                m_mem_tags[idx] = idx;
-                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &(m_mem_tags[idx]), 0);
+                // m_mem_tags[idx] = idx;
+                // cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &(m_mem_tags[idx]), 0);
+                m_mem_tags[mfi_idx] = mfi_idx;
+                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &(m_mem_tags[mfi_idx]), 0);
 
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     flux_fabs[i].push_back(std::move(flux[i]));
                     uface_fabs[i].push_back(std::move(uface[i]));
                 }
-                if (do_reflux) {
-                    for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    }
-                }
             } else {
             // BL_PROFILE_CUDA_GROUP("advect_group_cpu_exclusive", omp_get_thread_num());
             std::cout << "get_face_velocity_host" << std::endl;
+                const Box& bx = mfi.tilebox();
                 // Allocate fabs for fluxes and Godunov velocities.
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     const Box& bxtmp = amrex::surroundingNodes(bx,i);

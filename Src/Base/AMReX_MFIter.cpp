@@ -278,19 +278,19 @@ MFIter::Initialize ()
 #endif
 
 	currentIndex = beginIndex;
-#ifdef CUDA
-        // evenly assigned FABs to difference devices if more than one exists
-        if (isValid() && use_device) {
-#ifdef _OPENMP
-#pragma omp master
-#endif
-            {
-                int device_used = fabArray.deviceArray[currentIndex];
-                checkCudaErrors(cudaSetDevice(device_used));
-            }
-        }
-#endif
-
+// #ifdef CUDA
+//         // evenly assigned FABs to difference devices if more than one exists
+//         if (isValid() && use_device) {
+// // #ifdef _OPENMP
+// #pragma omp master
+// #endif
+//             {
+//                 int device_used = fabArray.deviceArray[currentIndex];
+//                 checkCudaErrors(cudaSetDevice(device_used));
+//             }
+//         }
+//  #endif
+// 
 	typ = fabArray.boxArray().ixType();
     }
 }
