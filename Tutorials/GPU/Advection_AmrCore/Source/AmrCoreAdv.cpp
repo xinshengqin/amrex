@@ -648,7 +648,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         // Only when use_device = true, OMP thread 0 will get a MFIter
         // that has jobs for GPU
 	// for (MFIter mfi(S_new, true, true); mfi.isValid(); ++mfi)
-	for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi)
+	for (MFIter mfi(S_new, true, true); mfi.isValid(); ++mfi)
 #else
 	for (MFIter mfi(S_new, true); mfi.isValid(); ++mfi)
 #endif
@@ -658,13 +658,11 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	    const FArrayBox& statein = Sborder[mfi];
 	    FArrayBox& stateout      =   S_new[mfi];
 
-            // compute velocities on faces (prescribed function of space and time)
             // TODO: write ifdef for these
             if ( omp_get_thread_num() == 0 ) { // only thread 0 talks to GPU
             // if ( false ) { // only thread 0 talks to GPU
-                int idx = mfi.LocalIndex();
-                // int tile_idx = mfi.tileIndex();
-                int unique_id = mfi.uniqueIndex();
+                // int idx = mfi.LocalIndex();
+                int idx = mfi.tileIndex();
                 int dev_id = statein.deviceID();
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     const Box& bxtmp = amrex::surroundingNodes(bx,i);
@@ -679,12 +677,13 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                     uface[i].resize(amrex::grow(bxtmp,1),1);
                 }
 
+                // compute velocities on faces (prescribed function of space and time)
                 get_face_velocity(lev, ctr_time,
                                   AMREX_D_DECL(BL_TO_FORTRAN_DEVICE((uface[0])),
                                                BL_TO_FORTRAN_DEVICE((uface[1])),
                                                BL_TO_FORTRAN_DEVICE((uface[2]))),
                                   dx, prob_lo
-                                  , idx, dev_id, unique_id);
+                                  , idx, dev_id, idx);
                 statein.toDevice(idx);
                 advect(time, bx.loVect(), bx.hiVect(),
                        BL_TO_FORTRAN_3D_DEVICE(statein), 
@@ -695,7 +694,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                        AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(flux[0]), 
                                     BL_TO_FORTRAN_3D_DEVICE(flux[1]), 
                                     BL_TO_FORTRAN_3D_DEVICE(flux[2])), 
-                       dx, dt, idx, dev_id, unique_id);
+                       dx, dt, idx, dev_id, idx);
                 stateout.toHost(idx);
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     flux[i].toHost(idx);
@@ -704,30 +703,20 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                     for (int i = 0; i < BL_SPACEDIM ; i++) {
                         m_copy_dst[i].push_back(&(fluxes[i][mfi]));
                         m_copy_box[i].push_back(mfi.nodaltilebox(i));
-                        // amrex::Print() << "dataPtr in fluxes: " << fluxes[i][mfi].dataPtr() << std::endl;
                     }
                 }
                 // add callback function to CUDA stream associated with idx
                 cudaStream_t pStream;
                 get_stream(&idx, &pStream, &dev_id);
-                m_mem_tags[unique_id] = unique_id;
-                // amrex::Print() << "unique_id: " << unique_id << std::endl;
-                // amrex::Print() << "m_mem_tags[unique_id]: " << m_mem_tags[unique_id] << std::endl;
-                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &(m_mem_tags[unique_id]), 0);
+                m_mem_tags[idx] = idx;
+                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &(m_mem_tags[idx]), 0);
 
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    // amrex::Print() << "dataPtr in flux before move: " << flux[i].dataPtr() << std::endl;
                     flux_fabs[i].push_back(std::move(flux[i]));
                     uface_fabs[i].push_back(std::move(uface[i]));
-                    // amrex::Print() << "dataPtr in flux after move: " << flux[i].dataPtr() << std::endl;
-                    // amrex::Print() << "dataPtr in flux_fabs after move: " << flux_fabs[i].back().dataPtr() << std::endl;
                 }
-                // checkCudaErrors(cudaDeviceSynchronize());
                 if (do_reflux) {
                     for (int i = 0; i < BL_SPACEDIM ; i++) {
-                        amrex::Print() << "dataPtr in flux_fabs in mfiter loop: " << flux_fabs[i].back().dataPtr() << std::endl;
-                        amrex::Print() << "dataPtr in fluxes in mfiter loop: " << fluxes[i][mfi].dataPtr() << std::endl;
-                        // fluxes[i][mfi].copy(flux_fabs[i].back(),mfi.nodaltilebox(i));	  
                     }
                 }
             } else {
@@ -777,15 +766,12 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
         checkCudaErrors(cudaSetDevice(i));
         checkCudaErrors(cudaDeviceSynchronize());
     }
-    // TODO: go back to use MultiFab to store all flux (but not uface FABs, which can save unnecessary memory)
     if (do_reflux) {
         BL_PROFILE("AmrCoreAdv::Advance()::do_reflux");
         int N = flux_fabs[0].size();
         if ( N > 0 ) {
             for (int nf = 0; nf < N; ++nf) {
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    amrex::Print() << "dataPtr in flux_fabs: " << flux_fabs[i][nf].dataPtr() << std::endl;
-                    amrex::Print() << "dataPtr in m_copy_dst: " << m_copy_dst[i][nf]->dataPtr() << std::endl;
                     m_copy_dst[i][nf]->copy(flux_fabs[i][nf], m_copy_box[i][nf]);
                 }
             }
