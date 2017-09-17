@@ -146,7 +146,7 @@ void* amrex_mempool_alloc_gpu (size_t nbytes, int device_id)
     return device_memory_pool[device_id]->alloc_device(nbytes, device_id);
 }
 
-void* amrex_mempool_alloc_gpu_hold (size_t nbytes, intptr_t tag, int device_id)
+void* amrex_mempool_alloc_gpu_hold (size_t nbytes, int tag, int device_id)
 {
 
     BL_ASSERT(device_id >= 0);
@@ -203,14 +203,13 @@ void amrex_array_init_snan (double* p, size_t nelems)
  */
 #ifdef CUDA
 void CUDART_CB cudaCallback_release_gpu(cudaStream_t event, cudaError_t status, void *data){
-    // checkCudaErrors(status);
-    // int idx = *((int*) data);
+    checkCudaErrors(status);
     // TODO add device_id
-    intptr_t* tag = (intptr_t*) data;
+    int* tag = (int*) data;
     amrex_mempool_release_gpu(*tag, 0);
 }
 
-void amrex_mempool_release_gpu (intptr_t tag, int device_id) 
+void amrex_mempool_release_gpu (int tag, int device_id) 
 {
     BL_ASSERT(device_id >= 0);
     device_memory_pool[device_id]->free_device_tag(tag, device_id);

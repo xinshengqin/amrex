@@ -126,7 +126,7 @@ DArena::alloc_device (size_t nbytes, int dev_id)
 }
 
 void* 
-DArena::alloc_device (size_t nbytes, intptr_t tag, int dev_id)
+DArena::alloc_device (size_t nbytes, int tag, int dev_id)
 {
     void* vp = alloc_device(nbytes, dev_id);
 
@@ -158,7 +158,7 @@ DArena::alloc_device (size_t nbytes, intptr_t tag, int dev_id)
 
 
 void
-DArena::free_device_tag (intptr_t tag, int dev_id)
+DArena::free_device_tag (int tag, int dev_id)
 {
     std::lock_guard<std::mutex> free_device_tag_guard(TagMemoryBlocksContainer_mutex);
     auto search = m_memory_blocks.find(TagMemoryBlocks(tag));

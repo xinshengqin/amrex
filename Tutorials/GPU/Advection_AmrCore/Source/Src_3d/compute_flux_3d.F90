@@ -62,7 +62,7 @@ contains
         phix, phix_y, phix_z, phiy, phiy_x, phiy_z, phiz, phiz_x, phiz_y, slope
     ! device 
     integer, intent(in) :: idx, device_id
-    integer(kind=c_intptr_t), value, intent(in) :: tag
+    integer(kind=c_int), value, intent(in) :: tag
 #endif
 
     hdtdx = 0.5*(dt/dx)

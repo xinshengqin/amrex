@@ -139,20 +139,24 @@ MFIter::~MFIter ()
 	ParallelDescriptor::MyTeam().MemoryBarrier();
 #endif
 
-// #ifdef CUDA
-// #ifdef _OPENMP
-// #pragma omp barrier
-// #pragma omp single
-// #endif
-//     if (use_device) {
-//         // synchronize all devices
-//         int n_dev = ParallelDescriptor::get_num_devices_used();
-//         for (int i = 0; i < n_dev; ++i) {
-//             checkCudaErrors(cudaSetDevice(i));
-//             checkCudaErrors(cudaDeviceSynchronize());
-//         }
-//     }
-// #endif
+#ifdef CUDA
+
+#ifdef _OPENMP
+    if (0 == omp_get_thread_num()) {
+#endif
+    if (use_device) {
+        // synchronize all devices
+        int n_dev = ParallelDescriptor::get_num_devices_used();
+        for (int i = 0; i < n_dev; ++i) {
+            checkCudaErrors(cudaSetDevice(i));
+            checkCudaErrors(cudaDeviceSynchronize());
+        }
+    }
+#ifdef _OPENMP
+    }
+#endif
+
+#endif
 }
 
 void 
@@ -252,24 +256,6 @@ MFIter::Initialize ()
                         }
                         gpu_endIndex = i+1;
                     }
-                    // output for debug
-// #pragma omp master
-//                     {
-//                         amrex::Print() << "local_index_map: " << std::endl;
-//                         amrex::Print() << "{ ";
-//                         int N = local_index_map->size();
-//                         for (int i = 0; i < N; ++i ) {
-//                             amrex::Print() << (*local_index_map)[i] << " ";
-//                         }
-//                         amrex::Print() << "}" << std::endl;;
-//                         amrex::Print() << "local_tile_index_map: " << std::endl;
-//                         amrex::Print() << "{ ";
-//                         N = local_tile_index_map->size();
-//                         for (int i = 0; i < N; ++i ) {
-//                             amrex::Print() << (*local_tile_index_map)[i] << " ";
-//                         }
-//                         amrex::Print() << "}" << std::endl;;
-//                     }
 
                 }
 
@@ -311,6 +297,8 @@ MFIter::Initialize ()
 #endif
 
 	currentIndex = beginIndex;
+	typ = fabArray.boxArray().ixType();
+
 // #ifdef CUDA
 //         // evenly assigned FABs to difference devices if more than one exists
 //         if (isValid() && use_device) {
@@ -324,7 +312,11 @@ MFIter::Initialize ()
 //         }
 //  #endif
 // 
-	typ = fabArray.boxArray().ixType();
+
+        // Register stuff for GPU 
+#ifdef CUDA
+        fortranMemoryTags.resize(index_map->size());
+#endif
     }
 }
 
@@ -452,19 +444,9 @@ MFIter::operator++ () {
 //     }
 // #endif
 // 
-    // releaseDeviceData();
 
 }
 
-void
-MFIter::releaseDeviceData() {
-    if (Device::inDeviceLaunchRegion()) {
-	for (int i = 0; i < registered_fabs.size(); ++i)
-	    registered_fabs[i]->toHost(registered_fabs_indices[i]);
-	registered_fabs.clear();
-	registered_fabs_indices.clear();
-    }
-}
 
 MFGhostIter::MFGhostIter (const FabArrayBase& fabarray)
     :

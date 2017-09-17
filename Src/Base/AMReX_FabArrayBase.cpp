@@ -16,17 +16,6 @@ namespace amrex {
 bool    FabArrayBase::do_async_sends;
 int     FabArrayBase::MaxComp;
 
-// #ifdef CUDA
-// 
-// #if BL_SPACEDIM == 1
-// IntVect FabArrayBase::mfiter_tile_size(1024000);
-// #elif BL_SPACEDIM == 2
-// IntVect FabArrayBase::mfiter_tile_size(1024000,1024000);
-// #else
-// IntVect FabArrayBase::mfiter_tile_size(1024000,1024000,1024000);
-// #endif
-// 
-// #else
 
 #if BL_SPACEDIM == 1
 IntVect FabArrayBase::mfiter_tile_size(1024000);

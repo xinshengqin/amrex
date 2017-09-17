@@ -7,6 +7,10 @@
 #include <AMReX_IntVect.H>
 #include <AMReX_FArrayBox.H>
 
+#ifdef CUDA
+#include <AMReX_MemPool.H>
+#endif
+
 namespace amrex {
 
 template<class T> class FabArray;
@@ -103,14 +107,6 @@ public:
     //! Return a unique index associated with the current box and/or tile.
     int uniqueIndex () const {return LocalTileIndex() + numLocalTiles() * LocalIndex();}
 
-    //! Maintain a record of all FABs that have been sent to the device.
-    template<class FAB>
-    bool registerFab(const FAB& fab, int idx = -1) const { return false; }
-
-    bool registerFab(const FArrayBox& fab, int idx = -1) const;
-
-    //! Return all data from the device to the host.
-    void releaseDeviceData();
 
     /**
     * \brief Return local index into the vector of fab pointers, m_fabs_v
@@ -124,6 +120,18 @@ public:
     int tileIndex () const {return currentIndex;}
 
     const DistributionMapping& DistributionMap () const { return fabArray.DistributionMap(); }
+
+#ifdef CUDA
+void registerFortranMemoryUsage(int idx, int dev_id) { 
+    // add callback function to CUDA stream associated with idx
+    cudaStream_t pStream;
+    get_stream(&idx, &pStream, &dev_id);
+    fortranMemoryTags[currentIndex] = idx; 
+    cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &fortranMemoryTags[currentIndex], 0);
+
+}
+void registerFab(FArrayBox& fab) { m_registered_fabs.push_back(std::move(fab)); }
+#endif
 
 protected:
 
@@ -145,30 +153,18 @@ protected:
     const Array<int>* local_tile_index_map;
     const Array<int>* num_local_tiles;
 
-    mutable Array<FArrayBox*> registered_fabs;
-    mutable Array<int> registered_fabs_indices;
 
 #ifdef CUDA
     bool use_device;
+    std::vector<int> fortranMemoryTags;
+    std::vector<FArrayBox> m_registered_fabs;
 #endif
   
     void Initialize ();
 };
 
-// Store a FAB in our list. Return true if we registered it;
-// return false if we had already registered it.
-inline
-bool
-MFIter::registerFab(const FArrayBox& fab, int idx) const
-{
-    FArrayBox* fab_p = const_cast<FArrayBox*>(&fab);
-    if (std::find(registered_fabs.begin(), registered_fabs.end(), fab_p) == registered_fabs.end()) {
-	registered_fabs.push_back(fab_p);
-	registered_fabs_indices.push_back(idx);
-	return true;
-    }
-    return false;
-}
+
+
 
 //! Iterate over ghost cells.  Lots of MFIter functions do not work.
 class MFGhostIter

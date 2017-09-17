@@ -57,7 +57,7 @@ subroutine advect_doit(time, lo, hi, &
 #ifdef CUDA
   integer, value, intent(in) :: idx, device_id
   attributes(device) :: uin, uout, vx, vy, vz, flxx, flxy, flxz
-  integer(kind=c_intptr_t), value, intent(in) :: tag
+  integer(kind=c_int), value, intent(in) :: tag
 #endif
 
 #ifdef CUDA

@@ -98,7 +98,7 @@ module mempool_module
        use, intrinsic :: iso_c_binding
        type(c_devptr) :: p
        integer(kind=c_size_t), intent(in), value :: nbytes, dev_id
-       integer(kind=c_intptr_t), intent(in), value :: tag
+       integer(kind=c_int), intent(in), value :: tag
      end function amrex_mempool_alloc_gpu_hold
      
      subroutine amrex_mempool_free_gpu (p, dev_id) bind(c)
@@ -598,7 +598,7 @@ contains
     integer, intent(in) :: lo1, hi1, lo2, hi2
     integer, intent(in) :: dev_id
     integer (kind=c_size_t) :: dev_id_c
-    integer (kind=c_intptr_t), intent(in) :: tag
+    integer (kind=c_int), intent(in) :: tag
     integer :: n1, n2
     integer (kind=c_size_t) :: sz
     type(c_devptr) :: cp
@@ -653,7 +653,7 @@ contains
     integer, intent(in) :: lo1, hi1, lo2, hi2, lo3, hi3
     integer, intent(in) :: dev_id
     integer (kind=c_size_t) :: dev_id_c
-    integer (kind=c_intptr_t), intent(in) :: tag
+    integer (kind=c_int), intent(in) :: tag
     integer :: n1, n2, n3
     integer (kind=c_size_t) :: sz
     type(c_devptr) :: cp

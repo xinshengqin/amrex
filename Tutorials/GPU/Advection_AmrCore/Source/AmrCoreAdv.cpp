@@ -623,19 +623,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
     MultiFab Sborder(grids[lev], dmap[lev], S_new.nComp(), num_grow, mfinfo);
     FillPatch(lev, time, Sborder, 0, Sborder.nComp());
 
-#ifdef CUDA
-    // TODO: find a better solution to this
-    // my thought: If I use callback function to handle this 
-    // I can let MFIter create m_mem_tags, who knows the required size 
-    // of m_mem_tags. Then I move the do_reflux copy into the loop,
-    // which is actually push to the CUDA queue by using callback functions
-    intptr_t* m_mem_tags = new intptr_t[100000];
-    std::array<std::vector<FArrayBox*>, BL_SPACEDIM> m_copy_dst;
-    std::array<std::vector<Box>, BL_SPACEDIM> m_copy_box;
-#endif
-
-    std::array<std::vector<FArrayBox>, BL_SPACEDIM> flux_fabs;
-    std::array<std::vector<FArrayBox>, BL_SPACEDIM> uface_fabs;
 
     BL_PROFILE_VAR("AmrCoreAdv::Advance()::advect_group_all", advect_group_all);
 #ifdef _OPENMP
@@ -661,8 +648,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             // TODO: write ifdef for these
             if ( omp_get_thread_num() == 0 ) { // only thread 0 talks to GPU
                 int local_tile_index = mfi.LocalTileIndex();
-
-                
                 if (local_tile_index != 0) continue;
 
                 // get box for the entire FAB
@@ -701,14 +686,10 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     fluxes[i][mfi].toHost(idx);
                 }
-                // add callback function to CUDA stream associated with idx
-                cudaStream_t pStream;
-                get_stream(&idx, &pStream, &dev_id);
-                m_mem_tags[idx] = idx;
-                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &(m_mem_tags[idx]), 0);
+                mfi.registerFortranMemoryUsage(idx,dev_id);
 
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    uface_fabs[i].push_back(std::move(uface[i]));
+                    mfi.registerFab(uface[i]);
                 }
             } else {
                 BL_PROFILE_CUDA_GROUP("advect_group_cpu_exclusive", omp_get_thread_num());
@@ -744,22 +725,6 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             }
 
 	}
-
-#ifdef CUDA
-        if ( omp_get_thread_num() == 0 ) { // thread 0 post-process GPU stuff
-            // TODO: put this in destructor
-            // also put destruction of m_mem_tags in destructor
-            // In this way, we can create m_mem_tags after MFIter is constrctued,
-            // by when we already know number of all tiles so we know how much 
-            // memory we need to allocate for m_mem_tags
-            int n_dev = ParallelDescriptor::get_num_devices_used();
-            for (int i = 0; i < n_dev; ++i) {
-                checkCudaErrors(cudaSetDevice(i));
-                checkCudaErrors(cudaDeviceSynchronize());
-            }
-        }
-#endif
-
 
     }
     BL_PROFILE_VAR_STOP(advect_group_all);
@@ -842,7 +807,6 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 #ifdef CUDA
     // store tag for each fab here
     int n_fabs = S_new.size();
-    intptr_t* m_mem_tags = new intptr_t[n_fabs];
 #endif
 
     MultiFab ufaces[BL_SPACEDIM];
@@ -879,7 +843,6 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 #ifdef CUDA
             int idx = mfi.LocalIndex();
             int dev_id = ufaces[0][mfi].deviceID();
-            m_mem_tags[idx] = (intptr_t) &(S_new[mfi]);
 #endif
 
             // TODO: write ifdef for these
@@ -889,22 +852,14 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
                                          BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
                                          BL_TO_FORTRAN_DEVICE(ufaces[2][mfi])),
                                   dx, prob_lo
-                                  , idx, dev_id, m_mem_tags[idx]
-                                  );
-                // add callback function to CUDA stream associated with idx
-                cudaStream_t pStream;
-                get_stream(&idx, &pStream, &dev_id);
-                cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &m_mem_tags[idx], 0);
+                                  , idx, dev_id, idx);
+                mfi.registerFortranMemoryUsage(idx,dev_id);
                 dt_est = std::numeric_limits<Real>::max(); // will process this later
                 if (my_verbose) {
 #pragma omp critical
                     std::cout << "Thread: " << omp_get_thread_num() << " works on FAB: " << idx << ". (on GPU)" << std::endl;
                 }
              } else {
-//                 if (my_verbose) {
-// #pragma omp critical
-//                     std::cout << "Thread: " << omp_get_thread_num() << " works on FAB: " << idx << std::endl;
-//                 }
                 for (int i = 0; i < BL_SPACEDIM ; i++) {
                     const Box& bx = mfi.nodaltilebox(i);
                     uface[i].resize(bx,1);
@@ -925,12 +880,6 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 	}
     }
 #ifdef CUDA
-    // synchronize all devices
-    int n_dev = ParallelDescriptor::get_num_devices_used();
-    for (int i = 0; i < n_dev; ++i) {
-        checkCudaErrors(cudaSetDevice(i));
-        checkCudaErrors(cudaDeviceSynchronize());
-    }
     Real* umax = (Real*) malloc(1 * sizeof(Real));
 
 // TODO: right now if you don't use Openmp here, you can't filter out 
@@ -938,6 +887,7 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 #ifdef _OPENMP
 #pragma omp parallel
 #endif
+    // TODO: put this into a function
     for (MFIter mfi(S_new, false, true); mfi.isValid(); ++mfi) {
         // TODO: write ifdef for these
         // compute norm of this fab on GPU
@@ -959,7 +909,7 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
             }
         }
     }
-    delete[] m_mem_tags;
+    // delete[] m_mem_tags;
 #endif
 
     if (!local) {

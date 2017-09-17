@@ -72,7 +72,7 @@ public:
 
     virtual void* alloc_device (size_t nbytes, int dev_id) override; 
 
-    void* alloc_device (size_t nbytes, intptr_t tag, int dev_id);
+    void* alloc_device (size_t nbytes, int tag, int dev_id);
 #ifdef CUDA_ARRAY
     /*
      * do nothing for now
@@ -80,7 +80,7 @@ public:
     virtual void* alloc_device_2d (std::size_t& _pitch, std::size_t _isize, std::size_t _jsize, int dev_id) override { void* pt = 0; return pt;};
 #endif
     virtual void free_device (void* ap, int dev_id) override; 
-    void free_device_tag (intptr_t tag, int dev_id);
+    void free_device_tag (int tag, int dev_id);
 
     //! The current amount of heap space used by the DArena object.
     size_t heap_space_used () const;
@@ -192,11 +192,11 @@ protected:
 
     class TagMemoryBlocks {
     public:
-        intptr_t tag;
+        int tag;
         std::vector<void*>* data;
 
         TagMemoryBlocks() { data = new std::vector<void*>(); }
-        TagMemoryBlocks(intptr_t tag_): tag(tag_) { data = new std::vector<void*>(); }
+        TagMemoryBlocks(int tag_): tag(tag_) { data = new std::vector<void*>(); }
         ~TagMemoryBlocks() {
             delete data;
         }

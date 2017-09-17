@@ -34,7 +34,7 @@ module get_face_velocity_module
   #ifdef CUDA
       attributes(device) :: vx, vy, vz
       integer, value, intent(in) :: idx, device_id
-      integer(kind=c_intptr_t), value, intent(in) :: tag
+      integer(kind=c_int), value, intent(in) :: tag
   #endif
     call get_face_velocity_doit(level, time, &
        vx, vx_l1, vx_l2, vx_l3, vx_h1, vx_h2, vx_h3, &
@@ -89,7 +89,7 @@ module get_face_velocity_module
   #ifdef CUDA
       attributes(device) :: vx, vy, vz
       integer, value, intent(in) :: idx, device_id
-      integer(kind=c_intptr_t), value, intent(in) :: tag
+      integer(kind=c_int), value, intent(in) :: tag
   #endif
   
   

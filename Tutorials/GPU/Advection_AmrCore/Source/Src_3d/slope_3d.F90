@@ -41,7 +41,7 @@ contains
 #ifdef CUDA
     attributes(device) :: q, dq
     integer, intent(in) :: idx, device_id
-    integer(kind=c_intptr_t), value, intent(in) :: tag
+    integer(kind=c_int), value, intent(in) :: tag
 #endif
 
 #ifdef CUDA
@@ -128,7 +128,7 @@ contains
 #ifdef CUDA
     integer, intent(in) :: idx, device_id
     attributes(device) :: q, dq
-    integer(kind=c_intptr_t), value, intent(in) :: tag
+    integer(kind=c_int), value, intent(in) :: tag
 #endif
 
 #ifdef CUDA
@@ -251,7 +251,7 @@ contains
 #ifdef CUDA
     integer, intent(in) :: idx, device_id
     attributes(device) :: q, dq
-    integer(kind=c_intptr_t), value, intent(in) :: tag
+    integer(kind=c_int), value, intent(in) :: tag
 #endif
 
 #ifdef CUDA
