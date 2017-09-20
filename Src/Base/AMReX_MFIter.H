@@ -131,6 +131,13 @@ void registerFortranMemoryUsage(int idx, int dev_id) {
 
 }
 void registerFab(FArrayBox& fab) { m_registered_fabs.push_back(std::move(fab)); }
+bool I_talk_to_GPU() const { 
+#ifdef _OPENMP
+    return (0 == omp_get_thread_num());
+#else
+    return true;
+#endif
+}
 #endif
 
 protected:
@@ -155,7 +162,7 @@ protected:
 
 
 #ifdef CUDA
-    bool use_device;
+    bool use_device; // whether you intent to use GPU in this MFIter loop
     std::vector<int> fortranMemoryTags;
     std::vector<FArrayBox> m_registered_fabs;
 #endif

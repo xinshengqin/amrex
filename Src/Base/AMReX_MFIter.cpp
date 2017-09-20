@@ -323,6 +323,29 @@ MFIter::Initialize ()
 Box 
 MFIter::tilebox () const
 { 
+#if defined(CUDA) && defined(_OPENMP)
+    if (I_talk_to_GPU() && use_device) { // This MFIter talks to GPU
+        return validbox();
+    }
+    else { // This MFIter belongs to CPU threads
+        BL_ASSERT(tile_array != 0);
+        Box bx((*tile_array)[currentIndex]);
+        if (! typ.cellCentered())
+        {
+            bx.convert(typ);
+            const Box& vbx = validbox();
+            const IntVect& Big = vbx.bigEnd();
+            for (int d=0; d<BL_SPACEDIM; ++d) {
+                if (typ.nodeCentered(d)) { // validbox should also be nodal in d-direction.
+                    if (bx.bigEnd(d) < Big[d]) {
+                        bx.growHi(d,-1);
+                    }
+                }
+            }
+        }
+        return bx;
+    }
+#else
     BL_ASSERT(tile_array != 0);
     Box bx((*tile_array)[currentIndex]);
     if (! typ.cellCentered())
@@ -339,6 +362,7 @@ MFIter::tilebox () const
 	}
     }
     return bx;
+#endif
 }
 
 Box
@@ -429,7 +453,24 @@ MFIter::grownnodaltilebox (int dir, int ng) const
 void
 MFIter::operator++ () {
 
+#if defined(CUDA) && defined(_OPENMP)
+    if (I_talk_to_GPU() && use_device) {// This MFIter talks to GPU
+        // increase currentIndex until 
+        // currentIndex points to the first tile in next FAB
+        // OR 
+        // currentIndex is not valid (out of bound)
+        do {
+            ++currentIndex;
+        }
+        while (isValid() && 0 !=LocalTileIndex());
+    }
+    else
+        ++currentIndex;
+#else
     ++currentIndex;
+#endif
+
+
 // #ifdef CUDA
 //     if (isValid() && use_device) {
 // #ifdef _OPENMP

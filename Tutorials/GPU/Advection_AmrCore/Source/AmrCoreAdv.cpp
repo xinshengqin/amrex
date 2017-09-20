@@ -646,12 +646,10 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	    FArrayBox& stateout      =   S_new[mfi];
 
             // TODO: write ifdef for these
-            if ( omp_get_thread_num() == 0 ) { // only thread 0 talks to GPU
-                int local_tile_index = mfi.LocalTileIndex();
-                if (local_tile_index != 0) continue;
+            if ( mfi.I_talk_to_GPU() ) { // only thread 0 talks to GPU
 
-                // get box for the entire FAB
-                const Box& bx = mfi.validbox();
+                // This will return box for the entire FAB if it's for GPU
+                const Box& bx = mfi.tilebox();
                 // local grid index
                 int idx = mfi.LocalIndex();
                 int dev_id = statein.deviceID();
@@ -846,7 +844,7 @@ AmrCoreAdv::EstTimeStep (int lev, bool local) const
 #endif
 
             // TODO: write ifdef for these
-            if ( omp_get_thread_num() == 0 ) { // only thread 0 talks to GPU
+            if ( mfi.I_talk_to_GPU() ) { // only thread 0 talks to GPU
                 get_face_velocity(lev, cur_time,
                                   AMREX_D_DECL(BL_TO_FORTRAN_DEVICE(ufaces[0][mfi]),
                                          BL_TO_FORTRAN_DEVICE(ufaces[1][mfi]),
