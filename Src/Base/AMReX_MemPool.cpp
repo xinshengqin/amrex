@@ -211,6 +211,7 @@ void CUDART_CB cudaCallback_release_gpu(cudaStream_t event, cudaError_t status, 
 
 void amrex_mempool_release_gpu (int tag, int device_id) 
 {
+    // free all GPU memories associated with tag
     BL_ASSERT(device_id >= 0);
     device_memory_pool[device_id]->free_device_tag(tag, device_id);
 }
