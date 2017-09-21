@@ -671,11 +671,14 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
             launch_get_face_velocity(lev, ctr_time,
                                      AMREX_D_DECL(uface[0], uface[1], uface[2]),
                                      dx, prob_lo , idx, dev_id, idx, mfi.I_talk_to_GPU());
-            // if (mfi.I_talk_to_GPU()) {
-            //     statein.toDevice(idx);
-            // }
+
+            // If you know GPU need the FAB, you should call mfi.processFabBeforeLaunch(...)
             mfi.processFabBeforeLaunch(statein,idx);
-            if (mfi.I_talk_to_GPU()) {
+
+            if (mfi.I_talk_to_GPU()) { 
+                // we have to have two branches here because CPUs prefer to use 
+                // temporary FAB flux but GPUs prefer to use the original fluxes MultiFab
+                // to avoid the need to copy at the end
                 launch_advect(time, bx.loVect(), bx.hiVect(),
                               statein, 
                               stateout,
@@ -699,6 +702,7 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
                               dx, dt, idx, dev_id, idx, mfi.I_talk_to_GPU());
             }
 
+            // If a FAB is output, you should call mfi.processFabAfterLaunch(FAB, idx)
             mfi.processFabAfterLaunch(stateout,idx);
             for (int i = 0; i < BL_SPACEDIM ; i++) {
                 mfi.processFabAfterLaunch(fluxes[i][mfi],idx);
