@@ -646,75 +646,68 @@ AmrCoreAdv::Advance (int lev, Real time, Real dt, int iteration, int ncycle)
 	    FArrayBox& stateout      =   S_new[mfi];
 
             // TODO: write ifdef for these
-            if ( mfi.I_talk_to_GPU() ) { // only thread 0 talks to GPU
+            BL_PROFILE_CUDA_GROUP("advect_group_cpu_exclusive", omp_get_thread_num());
 
-                // This will return box for the entire FAB if it's for GPU
-                const Box& bx = mfi.tilebox();
-                // local grid index
-                int idx = mfi.LocalIndex();
-                int dev_id = statein.deviceID();
-                for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    const Box& bxtmp = amrex::surroundingNodes(bx,i);
+            // This will return box for the entire FAB if it's for GPU
+            const Box& bx = mfi.tilebox();
+            // local grid index
+            int idx = mfi.LocalIndex();
+            int dev_id = statein.deviceID();
+            for (int i = 0; i < BL_SPACEDIM ; i++) {
+                const Box& bxtmp = amrex::surroundingNodes(bx,i);
 
+                if ( mfi.I_talk_to_GPU() ) {
                     uface[i].usePinnedMemory(true);
                     uface[i].needDeviceCopy(true);
                     uface[i].setDevice(0);
-                    uface[i].resize(amrex::grow(bxtmp,1),1);
                 }
+                uface[i].resize(amrex::grow(bxtmp,1),1);
 
-                // compute velocities on faces (prescribed function of space and time)
-                get_face_velocity(lev, ctr_time,
-                                  AMREX_D_DECL(BL_TO_FORTRAN_DEVICE((uface[0])),
-                                               BL_TO_FORTRAN_DEVICE((uface[1])),
-                                               BL_TO_FORTRAN_DEVICE((uface[2]))),
-                                  dx, prob_lo
-                                  , idx, dev_id, idx);
-                statein.toDevice(idx);
-                advect(time, bx.loVect(), bx.hiVect(),
-                       BL_TO_FORTRAN_3D_DEVICE(statein), 
-                       BL_TO_FORTRAN_3D_DEVICE(stateout),
-                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(uface[0]),
-                                    BL_TO_FORTRAN_3D_DEVICE(uface[1]),
-                                    BL_TO_FORTRAN_3D_DEVICE(uface[2])),
-                       AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(fluxes[0][mfi]), 
-                                    BL_TO_FORTRAN_3D_DEVICE(fluxes[1][mfi]), 
-                                    BL_TO_FORTRAN_3D_DEVICE(fluxes[2][mfi])), 
-                       dx, dt, idx, dev_id, idx);
-                stateout.toHost(idx);
-                for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    fluxes[i][mfi].toHost(idx);
-                }
-                mfi.registerFortranMemoryUsage(idx,dev_id);
-
-                for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    mfi.registerFab(uface[i]);
-                }
-            } else {
-                BL_PROFILE_CUDA_GROUP("advect_group_cpu_exclusive", omp_get_thread_num());
-                const Box& bx = mfi.tilebox();
-                // Allocate fabs for fluxes and Godunov velocities.
-                for (int i = 0; i < BL_SPACEDIM ; i++) {
-                    const Box& bxtmp = amrex::surroundingNodes(bx,i);
+                if ( !mfi.I_talk_to_GPU() ) 
                     flux[i].resize(bxtmp,S_new.nComp());
-                    uface[i].resize(amrex::grow(bxtmp,1),1);
-                }
-                get_face_velocity_host(lev, ctr_time,
-                                  AMREX_D_DECL(BL_TO_FORTRAN(uface[0]),
-                                         BL_TO_FORTRAN(uface[1]),
-                                         BL_TO_FORTRAN(uface[2])),
-                                  dx, prob_lo);
+            }
 
-                // compute new state (stateout) and fluxes.
-                advect_host(time, bx.loVect(), bx.hiVect(),
-                       BL_TO_FORTRAN_3D(statein), 
-                       BL_TO_FORTRAN_3D(stateout),
-                       AMREX_D_DECL(BL_TO_FORTRAN_3D(uface[0]),
-                              BL_TO_FORTRAN_3D(uface[1]),
-                              BL_TO_FORTRAN_3D(uface[2])),
-                       AMREX_D_DECL(BL_TO_FORTRAN_3D(flux[0]), 
-                              BL_TO_FORTRAN_3D(flux[1]), 
-                              BL_TO_FORTRAN_3D(flux[2])), 
-                       dx, dt);
+            // compute velocities on faces (prescribed function of space and time)
+            launch_get_face_velocity(lev, ctr_time,
+                                     AMREX_D_DECL(uface[0], uface[1], uface[2]),
+                                     dx, prob_lo , idx, dev_id, idx, mfi.I_talk_to_GPU());
+            // if (mfi.I_talk_to_GPU()) {
+            //     statein.toDevice(idx);
+            // }
+            mfi.processFabBeforeLaunch(statein,idx);
+            if (mfi.I_talk_to_GPU()) {
+                launch_advect(time, bx.loVect(), bx.hiVect(),
+                              statein, 
+                              stateout,
+                              AMREX_D_DECL(uface[0], 
+                                           uface[1], 
+                                           uface[2]),
+                              AMREX_D_DECL(fluxes[0][mfi], 
+                                           fluxes[1][mfi], 
+                                           fluxes[2][mfi]), 
+                              dx, dt, idx, dev_id, idx, mfi.I_talk_to_GPU());
+            } else {
+                launch_advect(time, bx.loVect(), bx.hiVect(),
+                              statein, 
+                              stateout,
+                              AMREX_D_DECL(uface[0], 
+                                           uface[1], 
+                                           uface[2]),
+                              AMREX_D_DECL(flux[0], 
+                                           flux[1], 
+                                           flux[2]), 
+                              dx, dt, idx, dev_id, idx, mfi.I_talk_to_GPU());
+            }
+
+            mfi.processFabAfterLaunch(stateout,idx);
+            for (int i = 0; i < BL_SPACEDIM ; i++) {
+                mfi.processFabAfterLaunch(fluxes[i][mfi],idx);
+            }
+            mfi.registerFortranMemoryUsage(idx,dev_id);
+            for (int i = 0; i < BL_SPACEDIM ; i++) {
+                mfi.registerFab(uface[i]);
+            }
+            if ( !mfi.I_talk_to_GPU() ) {
                 if (do_reflux) {
                     for (int i = 0; i < BL_SPACEDIM ; i++) {
                         fluxes[i][mfi].copy(flux[i],mfi.nodaltilebox(i));	  
@@ -954,4 +947,61 @@ AmrCoreAdv::WritePlotFile () const
     
     amrex::WriteMultiLevelPlotfile(plotfilename, finest_level+1, mf, varnames,
 				    Geom(), t_new[0], istep, refRatio());
+}
+
+void launch_get_face_velocity(const int& lev, const amrex_real& ctr_time, 
+                              AMREX_D_DECL(FArrayBox& uface_x, FArrayBox& uface_y, FArrayBox& uface_z), 
+			      const Real* dx, const Real* prob_lo, 
+                              const int& idx, const int& dev_id, const int& tag,
+                              const bool& use_gpu
+                              ) 
+{
+    if (use_gpu) {
+        get_face_velocity(lev, ctr_time,
+                          AMREX_D_DECL(BL_TO_FORTRAN_DEVICE((uface_x)),
+                                       BL_TO_FORTRAN_DEVICE((uface_y)),
+                                       BL_TO_FORTRAN_DEVICE((uface_z))),
+                          dx, prob_lo , idx, dev_id, tag);
+    }
+    else {
+        get_face_velocity_host(lev, ctr_time,
+                               AMREX_D_DECL(BL_TO_FORTRAN(uface_x),
+                                            BL_TO_FORTRAN(uface_y),
+                                            BL_TO_FORTRAN(uface_z)),
+                               dx, prob_lo);
+    }
+}
+
+void launch_advect(const amrex_real& time, const int* lo, const int*hi,
+                   const FArrayBox& statein, FArrayBox& stateout,
+                   AMREX_D_DECL(const FArrayBox& uface_x, const FArrayBox& uface_y, const FArrayBox& uface_z), 
+                   AMREX_D_DECL(FArrayBox& flux_x, FArrayBox& flux_y, FArrayBox& flux_z), 
+                   const Real* dx, const Real& dt,
+                   const int& idx, const int& dev_id, const int& tag,
+                   const bool& use_gpu)
+{
+    if (use_gpu) {
+        advect(time, lo, hi,
+               BL_TO_FORTRAN_3D_DEVICE(statein), 
+               BL_TO_FORTRAN_3D_DEVICE(stateout),
+               AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(uface_x),
+                            BL_TO_FORTRAN_3D_DEVICE(uface_y),
+                            BL_TO_FORTRAN_3D_DEVICE(uface_z)),
+               AMREX_D_DECL(BL_TO_FORTRAN_3D_DEVICE(flux_x), 
+                            BL_TO_FORTRAN_3D_DEVICE(flux_y), 
+                            BL_TO_FORTRAN_3D_DEVICE(flux_z)), 
+               dx, dt, idx, dev_id, tag);
+    }
+    else {
+        advect_host(time, lo, hi,
+                    BL_TO_FORTRAN_3D(statein), 
+                    BL_TO_FORTRAN_3D(stateout),
+                    AMREX_D_DECL(BL_TO_FORTRAN_3D(uface_x),
+                                 BL_TO_FORTRAN_3D(uface_y),
+                                 BL_TO_FORTRAN_3D(uface_z)),
+                    AMREX_D_DECL(BL_TO_FORTRAN_3D(flux_x), 
+                                 BL_TO_FORTRAN_3D(flux_y), 
+                                 BL_TO_FORTRAN_3D(flux_z)), 
+                    dx, dt);
+    }
 }

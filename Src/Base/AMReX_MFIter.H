@@ -123,6 +123,7 @@ public:
 
 #ifdef CUDA
 void registerFortranMemoryUsage(int idx, int dev_id) { 
+    if (!I_talk_to_GPU()) return;
     // add callback function to CUDA stream associated with idx
     cudaStream_t pStream;
     get_stream(&idx, &pStream, &dev_id);
@@ -130,7 +131,7 @@ void registerFortranMemoryUsage(int idx, int dev_id) {
     cudaStreamAddCallback(pStream, cudaCallback_release_gpu, (void*) &fortranMemoryTags[currentIndex], 0);
 
 }
-void registerFab(FArrayBox& fab) { m_registered_fabs.push_back(std::move(fab)); }
+void registerFab(FArrayBox& fab) { if (I_talk_to_GPU()) m_registered_fabs.push_back(std::move(fab)); }
 bool I_talk_to_GPU() const { 
 #ifdef _OPENMP
     return (0 == omp_get_thread_num());
@@ -138,6 +139,15 @@ bool I_talk_to_GPU() const {
     return true;
 #endif
 }
+
+void processFabBeforeLaunch(const FArrayBox& fab, int idx) const {
+    if (I_talk_to_GPU()) fab.toDevice(idx);
+}
+
+void processFabAfterLaunch(const FArrayBox& fab, int idx) const {
+    if (I_talk_to_GPU()) fab.toHost(idx);
+}
+
 #endif
 
 protected:

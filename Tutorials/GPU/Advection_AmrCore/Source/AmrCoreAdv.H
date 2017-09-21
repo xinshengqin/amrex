@@ -159,4 +159,19 @@ private:
     int plot_int = -1;
 };
 
+void launch_get_face_velocity(const int& lev, const amrex_real& ctr_time, 
+                              AMREX_D_DECL(FArrayBox& uface_x, FArrayBox& uface_y, FArrayBox& uface_z), 
+			      const Real* dx, const Real* prob_lo, 
+                              const int& idx, const int& device_id, const int& tag,
+                              const bool& use_gpu); 
+void launch_advect(const amrex_real& time, const int* lo, const int*hi,
+                   const FArrayBox& statein, FArrayBox& stateout,
+                   AMREX_D_DECL(const FArrayBox& uface_x, 
+                                const FArrayBox& uface_y, 
+                                const FArrayBox& uface_z), 
+                   AMREX_D_DECL(FArrayBox& flux_x, FArrayBox& flux_y, FArrayBox& flux_z), 
+                   const Real* dx, const Real& dt,
+                   const int& idx, const int& dev_id, const int& tag,
+                   const bool& use_gpu);
+
 #endif
